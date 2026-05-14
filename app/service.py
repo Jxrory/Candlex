@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime, timedelta, timezone
 
 import asyncpg
@@ -10,6 +11,8 @@ from app.sources.base import BaseSource
 from app.sources.sina import SinaSource
 from app.sources.tencent import TencentSource
 from app.sources.eastmoney import EastMoneySource
+
+logger = logging.getLogger(__name__)
 
 SOURCES: dict[str, BaseSource] = {
     "sina": SinaSource(),
@@ -141,6 +144,11 @@ async def get_kline(
     cached = await query_cached(pool, symbol, start, end)
 
     if cached:
+        logger.info(
+            "%s cache HIT: %d records in [%s, %s]",
+            symbol, len(cached), start, end,
+        )
+
         refresh_needed = [
             r["date"] for r in cached
             if _needs_refresh(r["updated_at"], r["date"], today)
@@ -148,32 +156,61 @@ async def get_kline(
 
         if refresh_needed:
             fetch_start = min(refresh_needed)
-            fetch_end = end
+            logger.warning(
+                "%s cache STALE: %d dates need refresh (earliest %s)",
+                symbol, len(refresh_needed), fetch_start,
+            )
 
             for source_name in settings.source_priority:
                 source = SOURCES.get(source_name)
                 if not source:
                     continue
                 try:
-                    df = await source.fetch(symbol, fetch_start, fetch_end)
+                    logger.info(
+                        "%s fetching from %s [%s, %s]",
+                        symbol, source_name, fetch_start, end,
+                    )
+                    df = await source.fetch(symbol, fetch_start, end)
                     if not df.empty:
                         await upsert_kline(pool, symbol, df, source_name)
+                        logger.info(
+                            "%s upserted %d rows from %s",
+                            symbol, len(df), source_name,
+                        )
                         break
-                except Exception:
+                    logger.warning("%s %s returned empty", symbol, source_name)
+                except Exception as e:
+                    logger.error(
+                        "%s %s failed: %s", symbol, source_name, e,
+                    )
                     continue
 
             cached = await query_cached(pool, symbol, start, end)
+        else:
+            logger.info("%s cache FRESH: no refresh needed", symbol)
     else:
+        logger.info("%s cache MISS: no data in [%s, %s]", symbol, start, end)
+
         for source_name in settings.source_priority:
             source = SOURCES.get(source_name)
             if not source:
                 continue
             try:
+                logger.info(
+                    "%s fetching from %s [%s, %s]",
+                    symbol, source_name, start, end,
+                )
                 df = await source.fetch(symbol, start, end)
                 if not df.empty:
                     await upsert_kline(pool, symbol, df, source_name)
+                    logger.info(
+                        "%s upserted %d rows from %s",
+                        symbol, len(df), source_name,
+                    )
                     break
-            except Exception:
+                logger.warning("%s %s returned empty", symbol, source_name)
+            except Exception as e:
+                logger.error("%s %s failed: %s", symbol, source_name, e)
                 continue
 
         cached = await query_cached(pool, symbol, start, end)

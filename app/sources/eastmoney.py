@@ -1,8 +1,11 @@
+import logging
 from datetime import date
 import akshare as ak
 import pandas as pd
 
 from app.sources.base import BaseSource
+
+logger = logging.getLogger(__name__)
 
 COLUMN_MAP = {
     "日期": "date",
@@ -27,17 +30,22 @@ class EastMoneySource(BaseSource):
         start_str = start_date.strftime("%Y%m%d")
         end_str = end_date.strftime("%Y%m%d")
 
+        logger.info("eastmoney fetch raw %s [%s, %s]", code, start_str, end_str)
         raw = ak.stock_zh_a_hist(
             symbol=code, period="daily",
             start_date=start_str, end_date=end_str, adjust="",
         )
         if raw.empty:
+            logger.warning("eastmoney raw data empty for %s", code)
             return pd.DataFrame()
+        logger.info("eastmoney raw got %d rows for %s", len(raw), code)
 
+        logger.info("eastmoney fetch qfq %s", code)
         raw_qfq = ak.stock_zh_a_hist(
             symbol=code, period="daily",
             start_date=start_str, end_date=end_str, adjust="qfq",
         )
+        logger.info("eastmoney fetch hfq %s", code)
         raw_hfq = ak.stock_zh_a_hist(
             symbol=code, period="daily",
             start_date=start_str, end_date=end_str, adjust="hfq",
@@ -59,4 +67,5 @@ class EastMoneySource(BaseSource):
         result["factor_hfq"] = (result["close_hfq"] / result["close"]).round(6)
         result.drop(columns=["close_qfq", "close_hfq"], inplace=True)
 
+        logger.info("eastmoney returning %d rows for %s", len(result), code)
         return result[["date", "open", "high", "low", "close", "volume", "amount", "factor_qfq", "factor_hfq"]]

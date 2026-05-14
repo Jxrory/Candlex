@@ -1,9 +1,11 @@
+import logging
 from datetime import date, timedelta
 from fastapi import APIRouter, Query, Path
 
 from app.schemas import KlineRecord
 from app.service import get_kline
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -20,4 +22,7 @@ async def kline(
     if start is None:
         start = today - timedelta(days=365)
 
-    return await get_kline(symbol, start, end, adjust)
+    logger.info("GET /kline/%s start=%s end=%s adjust=%s", symbol, start, end, adjust)
+    records = await get_kline(symbol, start, end, adjust)
+    logger.info("GET /kline/%s returned %d records", symbol, len(records))
+    return records
