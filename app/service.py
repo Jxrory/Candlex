@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import asyncpg
 import pandas as pd
@@ -28,7 +28,7 @@ def _needs_refresh(updated_at: datetime | None, target_date: date, today: date) 
         ttl = settings.cache_ttl_recent_seconds
     else:
         return False
-    age = (datetime.now() - updated_at).total_seconds()
+    age = (datetime.now(timezone.utc) - updated_at).total_seconds()
     return age > ttl
 
 
@@ -101,11 +101,14 @@ def _apply_adjust(
     for r in records:
         factor = getattr(r, factor_key, None)
         if factor and factor != 0:
-            r.open = round(r.open * factor, 3)
-            r.high = round(r.high * factor, 3)
-            r.low = round(r.low * factor, 3)
-            r.close = round(r.close * factor, 3)
-        adjusted.append(r)
+            adjusted.append(r.model_copy(update={
+                "open": round(r.open * factor, 3),
+                "high": round(r.high * factor, 3),
+                "low": round(r.low * factor, 3),
+                "close": round(r.close * factor, 3),
+            }))
+        else:
+            adjusted.append(r)
     return adjusted
 
 
@@ -113,14 +116,14 @@ def _rows_to_records(rows: list[asyncpg.Record]) -> list[KlineRecord]:
     return [
         KlineRecord(
             date=r["date"],
-            open=float(r["open"]) if r["open"] else 0.0,
-            high=float(r["high"]) if r["high"] else 0.0,
-            low=float(r["low"]) if r["low"] else 0.0,
-            close=float(r["close"]) if r["close"] else 0.0,
-            volume=int(r["volume"]) if r["volume"] else None,
-            amount=float(r["amount"]) if r["amount"] else None,
-            factor_qfq=float(r["factor_qfq"]) if r["factor_qfq"] else None,
-            factor_hfq=float(r["factor_hfq"]) if r["factor_hfq"] else None,
+            open=float(r["open"]) if r["open"] is not None else 0.0,
+            high=float(r["high"]) if r["high"] is not None else 0.0,
+            low=float(r["low"]) if r["low"] is not None else 0.0,
+            close=float(r["close"]) if r["close"] is not None else 0.0,
+            volume=int(r["volume"]) if r["volume"] is not None else None,
+            amount=float(r["amount"]) if r["amount"] is not None else None,
+            factor_qfq=float(r["factor_qfq"]) if r["factor_qfq"] is not None else None,
+            factor_hfq=float(r["factor_hfq"]) if r["factor_hfq"] is not None else None,
         )
         for r in rows
     ]
@@ -138,21 +141,13 @@ async def get_kline(
     cached = await query_cached(pool, symbol, start, end)
 
     if cached:
-        cached_dates = {r["date"] for r in cached}
-        all_dates = {
-            start + timedelta(days=i) for i in range((end - start).days + 1)
-        }
-        missing_dates = sorted(all_dates - cached_dates)
-
         refresh_needed = [
             r["date"] for r in cached
             if _needs_refresh(r["updated_at"], r["date"], today)
         ]
 
-        if missing_dates or refresh_needed:
-            fetch_start = min(
-                (missing_dates + refresh_needed + [start])
-            )
+        if refresh_needed:
+            fetch_start = min(refresh_needed)
             fetch_end = end
 
             for source_name in settings.source_priority:

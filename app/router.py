@@ -1,5 +1,5 @@
 from datetime import date, timedelta
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Path
 
 from app.schemas import KlineRecord
 from app.service import get_kline
@@ -9,7 +9,7 @@ router = APIRouter()
 
 @router.get("/kline/{symbol}", response_model=list[KlineRecord])
 async def kline(
-    symbol: str,
+    symbol: str = Path(pattern=r"^(SH|SZ|BJ)\.[0-9]{6}$"),
     start: date | None = Query(None),
     end: date | None = Query(None),
     adjust: str | None = Query(None, pattern="^(qfq|hfq)$"),
