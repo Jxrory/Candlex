@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 SOURCES: dict[str, BaseSource] = {
     "sina": SinaSource(),
-    "tencent": TencentSource(),
-    "eastmoney": EastMoneySource(),
+    # "tencent": TencentSource(),
+    # "eastmoney": EastMoneySource(),
 }
 
 
