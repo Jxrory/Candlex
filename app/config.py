@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     cache_ttl_recent_seconds: int = 300
     source_priority: list[str] = ["sina", "tencent", "eastmoney"]
 
+    dividend_sync_time: str = "08:30"
+    dividend_sync_symbols: list[str] = []
+
     model_config: ClassVar[dict] = {"env_prefix": "CANDLEX_", "env_file": ".env"}
 
 

@@ -1,9 +1,14 @@
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
+
 from app.calendar import calendar_service
+from app.dividend import dividend_service
 from app.database import get_pool, close_pool
 from app.router import router
+from app.config import settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -12,6 +17,27 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+scheduler = AsyncIOScheduler()
+
+
+async def sync_all_dividends():
+    logger.info("scheduled task: sync dividends for all symbols")
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT DISTINCT symbol FROM kline_data ORDER BY symbol"
+        )
+    symbols = [r["symbol"] for r in rows]
+    if settings.dividend_sync_symbols:
+        symbols = [s for s in symbols if s in settings.dividend_sync_symbols]
+    for symbol in symbols:
+        try:
+            count = await dividend_service.sync_symbol(pool, symbol)
+            if count:
+                logger.info("synced %d events for %s", count, symbol)
+        except Exception as e:
+            logger.error("dividend sync failed for %s: %s", symbol, e)
+    logger.info("scheduled task: dividend sync complete")
 
 
 @asynccontextmanager
@@ -19,7 +45,21 @@ async def lifespan(app: FastAPI):
     logger.info("CandleX starting up")
     await calendar_service.load()
     await get_pool()
+
+    hour, minute = settings.dividend_sync_time.split(":")
+    scheduler.add_job(
+        sync_all_dividends,
+        trigger="cron",
+        hour=int(hour),
+        minute=int(minute),
+        id="sync_dividends",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info("scheduler started, dividend sync at %s", settings.dividend_sync_time)
+
     yield
+    scheduler.shutdown()
     await close_pool()
     logger.info("CandleX shut down")
 
