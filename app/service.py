@@ -1,0 +1,187 @@
+from datetime import date, datetime, timedelta
+
+import asyncpg
+import pandas as pd
+
+from app.config import settings
+from app.database import get_pool
+from app.schemas import KlineRecord
+from app.sources.base import BaseSource
+from app.sources.sina import SinaSource
+from app.sources.tencent import TencentSource
+from app.sources.eastmoney import EastMoneySource
+
+SOURCES: dict[str, BaseSource] = {
+    "sina": SinaSource(),
+    "tencent": TencentSource(),
+    "eastmoney": EastMoneySource(),
+}
+
+
+def _needs_refresh(updated_at: datetime | None, target_date: date, today: date) -> bool:
+    if updated_at is None:
+        return True
+    days_ago = (today - target_date).days
+    if days_ago == 0:
+        ttl = settings.cache_ttl_today_seconds
+    elif days_ago <= settings.cache_ttl_recent_days:
+        ttl = settings.cache_ttl_recent_seconds
+    else:
+        return False
+    age = (datetime.now() - updated_at).total_seconds()
+    return age > ttl
+
+
+async def query_cached(
+    pool: asyncpg.Pool, symbol: str, start: date, end: date
+) -> list[asyncpg.Record]:
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT date, open, high, low, close, volume, amount,
+                      factor_qfq, factor_hfq, updated_at
+               FROM kline_data
+               WHERE symbol = $1 AND date BETWEEN $2 AND $3
+               ORDER BY date""",
+            symbol, start, end,
+        )
+    return rows
+
+
+def _df_to_rows(df: pd.DataFrame, symbol: str, source: str) -> list[tuple]:
+    rows: list[tuple] = []
+    for _, row in df.iterrows():
+        rows.append((
+            symbol,
+            row["date"],
+            float(row["open"]) if pd.notna(row.get("open")) else None,
+            float(row["high"]) if pd.notna(row.get("high")) else None,
+            float(row["low"]) if pd.notna(row.get("low")) else None,
+            float(row["close"]) if pd.notna(row.get("close")) else None,
+            int(row["volume"]) if pd.notna(row.get("volume")) else None,
+            float(row["amount"]) if pd.notna(row.get("amount")) else None,
+            float(row["factor_qfq"]) if pd.notna(row.get("factor_qfq")) else None,
+            float(row["factor_hfq"]) if pd.notna(row.get("factor_hfq")) else None,
+            source,
+        ))
+    return rows
+
+
+async def upsert_kline(
+    pool: asyncpg.Pool, symbol: str, df: pd.DataFrame, source: str
+) -> None:
+    if df.empty:
+        return
+    rows = _df_to_rows(df, symbol, source)
+    async with pool.acquire() as conn:
+        await conn.executemany(
+            """INSERT INTO kline_data
+               (symbol, date, open, high, low, close, volume, amount,
+                factor_qfq, factor_hfq, source, updated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+               ON CONFLICT (symbol, date)
+               DO UPDATE SET
+                   open=EXCLUDED.open, high=EXCLUDED.high,
+                   low=EXCLUDED.low, close=EXCLUDED.close,
+                   volume=EXCLUDED.volume, amount=EXCLUDED.amount,
+                   factor_qfq=EXCLUDED.factor_qfq,
+                   factor_hfq=EXCLUDED.factor_hfq,
+                   source=EXCLUDED.source,
+                   updated_at=NOW()""",
+            rows,
+        )
+
+
+def _apply_adjust(
+    records: list[KlineRecord], adjust: str | None
+) -> list[KlineRecord]:
+    if adjust not in ("qfq", "hfq"):
+        return records
+    factor_key = f"factor_{adjust}"
+    adjusted: list[KlineRecord] = []
+    for r in records:
+        factor = getattr(r, factor_key, None)
+        if factor and factor != 0:
+            r.open = round(r.open * factor, 3)
+            r.high = round(r.high * factor, 3)
+            r.low = round(r.low * factor, 3)
+            r.close = round(r.close * factor, 3)
+        adjusted.append(r)
+    return adjusted
+
+
+def _rows_to_records(rows: list[asyncpg.Record]) -> list[KlineRecord]:
+    return [
+        KlineRecord(
+            date=r["date"],
+            open=float(r["open"]) if r["open"] else 0.0,
+            high=float(r["high"]) if r["high"] else 0.0,
+            low=float(r["low"]) if r["low"] else 0.0,
+            close=float(r["close"]) if r["close"] else 0.0,
+            volume=int(r["volume"]) if r["volume"] else None,
+            amount=float(r["amount"]) if r["amount"] else None,
+            factor_qfq=float(r["factor_qfq"]) if r["factor_qfq"] else None,
+            factor_hfq=float(r["factor_hfq"]) if r["factor_hfq"] else None,
+        )
+        for r in rows
+    ]
+
+
+async def get_kline(
+    symbol: str,
+    start: date,
+    end: date,
+    adjust: str | None = None,
+) -> list[KlineRecord]:
+    pool = await get_pool()
+    today = date.today()
+
+    cached = await query_cached(pool, symbol, start, end)
+
+    if cached:
+        cached_dates = {r["date"] for r in cached}
+        all_dates = {
+            start + timedelta(days=i) for i in range((end - start).days + 1)
+        }
+        missing_dates = sorted(all_dates - cached_dates)
+
+        refresh_needed = [
+            r["date"] for r in cached
+            if _needs_refresh(r["updated_at"], r["date"], today)
+        ]
+
+        if missing_dates or refresh_needed:
+            fetch_start = min(
+                (missing_dates + refresh_needed + [start])
+            )
+            fetch_end = end
+
+            for source_name in settings.source_priority:
+                source = SOURCES.get(source_name)
+                if not source:
+                    continue
+                try:
+                    df = await source.fetch(symbol, fetch_start, fetch_end)
+                    if not df.empty:
+                        await upsert_kline(pool, symbol, df, source_name)
+                        break
+                except Exception:
+                    continue
+
+            cached = await query_cached(pool, symbol, start, end)
+    else:
+        for source_name in settings.source_priority:
+            source = SOURCES.get(source_name)
+            if not source:
+                continue
+            try:
+                df = await source.fetch(symbol, start, end)
+                if not df.empty:
+                    await upsert_kline(pool, symbol, df, source_name)
+                    break
+            except Exception:
+                continue
+
+        cached = await query_cached(pool, symbol, start, end)
+
+    records = _rows_to_records(cached)
+    return _apply_adjust(records, adjust)
