@@ -46,14 +46,20 @@ class CalendarService:
     async def _sync(self, pool: asyncpg.Pool) -> None:
         logger.info("fetching trading calendar from akshare")
         df = ak.tool_trade_date_hist_sina()
+        logger.info("akshare returned %d trading days, columns=%s", len(df), list(df.columns))
         rows = [(d,) for d in df["trade_date"]]
+        logger.info("calendar upsert starting (%d rows)...", len(rows))
+        if rows:
+            logger.info("first 3 rows: %s, last row: %s", rows[:3], rows[-1])
         async with pool.acquire() as conn:
             await conn.executemany(
                 "INSERT INTO trade_calendar (trade_date, updated_at) VALUES ($1, NOW()) ON CONFLICT (trade_date) DO UPDATE SET updated_at=NOW()",
                 rows,
+                timeout=120,
             )
         self._dates = sorted(df["trade_date"].tolist())
-        logger.info("calendar synced %d trading days", len(self._dates))
+        logger.info("calendar synced %d trading days: %s ~ %s",
+                     len(self._dates), self._dates[0], self._dates[-1])
 
     def nearest_forward(self, d: date) -> date:
         idx = bisect.bisect_right(self._dates, d)
