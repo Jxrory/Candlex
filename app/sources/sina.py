@@ -42,10 +42,8 @@ class SinaSource(BaseSource):
         logger.info("sina factor_qfq cols=%s shape=%s", list(factor_qfq.columns), factor_qfq.shape)
         logger.info("sina factor_hfq cols=%s shape=%s", list(factor_hfq.columns), factor_hfq.shape)
 
-        result = raw[["open", "high", "low", "close", "volume", "amount"]].copy()
-        result["date"] = raw.index
-        result.reset_index(drop=True, inplace=True)
-        logger.info("sina result date dtypes=%s sample=%s", result["date"].dtype, list(result["date"][:3]))
+        result = raw[["date", "open", "high", "low", "close", "volume", "amount"]].copy()
+        logger.info("sina result date dtype=%s sample=%s", result["date"].dtype, list(result["date"][:3]))
 
         factor_qfq["date"] = pd.to_datetime(factor_qfq["date"]).dt.date
         factor_hfq["date"] = pd.to_datetime(factor_hfq["date"]).dt.date
