@@ -64,8 +64,8 @@ class EastMoneySource(BaseSource):
 
         result = result.merge(raw_qfq, on="date", how="left")
         result = result.merge(raw_hfq, on="date", how="left")
-        result["factor_qfq"] = (result["close_qfq"] / result["close"]).round(6)
-        result["factor_hfq"] = (result["close_hfq"] / result["close"]).round(6)
+        result["factor_qfq"] = (result["close_qfq"] / result["close"]).round(6).fillna(1.0)
+        result["factor_hfq"] = (result["close_hfq"] / result["close"]).round(6).fillna(1.0)
         result.drop(columns=["close_qfq", "close_hfq"], inplace=True)
 
         logger.info("eastmoney returning %d rows, date dtype=%s sample=%s",

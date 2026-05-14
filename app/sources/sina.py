@@ -62,7 +62,7 @@ class SinaSource(BaseSource):
         result["factor_hfq"] = result.get("factor_hfq", pd.NA)
         result[["factor_qfq", "factor_hfq"]] = result[
             ["factor_qfq", "factor_hfq"]
-        ].ffill()
+        ].ffill().fillna(1.0)
 
         logger.info("sina returning %d rows, date dtype=%s sample=%s, factor_qfq sample=%s",
                      len(result), result["date"].dtype,
