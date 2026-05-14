@@ -1,6 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from app.calendar import calendar_service
 from app.database import get_pool, close_pool
 from app.router import router
 
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("CandleX starting up")
+    await calendar_service.load()
     await get_pool()
     yield
     await close_pool()

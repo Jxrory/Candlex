@@ -5,6 +5,7 @@ import asyncpg
 import pandas as pd
 
 from app.config import settings
+from app.calendar import calendar_service
 from app.database import get_pool
 from app.schemas import KlineRecord
 from app.sources.base import BaseSource
@@ -158,6 +159,10 @@ async def get_kline(
 ) -> list[KlineRecord]:
     pool = await get_pool()
     today = date.today()
+
+    await calendar_service.ensure_fresh()
+    start = calendar_service.nearest_forward(start)
+    end = calendar_service.nearest_backward(end)
 
     cached = await query_cached(pool, symbol, start, end)
 
