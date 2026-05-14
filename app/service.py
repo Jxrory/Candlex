@@ -162,23 +162,43 @@ async def get_kline(
     cached = await query_cached(pool, symbol, start, end)
 
     if cached:
+        cached_dates = [r["date"] for r in cached]
+        min_cached = min(cached_dates)
+        max_cached = max(cached_dates)
         logger.info(
-            "%s cache HIT: %d records in [%s, %s]",
-            symbol, len(cached), start, end,
+            "%s cache HIT: %d records in [%s, %s] (cached range: %s ~ %s)",
+            symbol, len(cached), start, end, min_cached, max_cached,
         )
+
+        needs_fetch = False
+        fetch_from = start
+
+        has_gap_before = start < min_cached
+        has_gap_after = end > max_cached
+
+        if has_gap_before or has_gap_after:
+            needs_fetch = True
+            if has_gap_before:
+                logger.info("%s cache GAP before: %s ~ %s", symbol, start, min_cached)
+            if has_gap_after:
+                logger.info("%s cache GAP after: %s ~ %s", symbol, max_cached, end)
 
         refresh_needed = [
             r["date"] for r in cached
             if _needs_refresh(r["updated_at"], r["date"], today)
         ]
-
         if refresh_needed:
-            fetch_start = min(refresh_needed)
+            needs_fetch = True
+            if not has_gap_before and not has_gap_after:
+                fetch_from = min(refresh_needed)
+            else:
+                fetch_from = min(fetch_from, min(refresh_needed))
             logger.warning(
                 "%s cache STALE: %d dates need refresh (earliest %s)",
-                symbol, len(refresh_needed), fetch_start,
+                symbol, len(refresh_needed), min(refresh_needed),
             )
 
+        if needs_fetch:
             for source_name in settings.source_priority:
                 source = SOURCES.get(source_name)
                 if not source:
@@ -186,9 +206,9 @@ async def get_kline(
                 try:
                     logger.info(
                         "%s fetching from %s [%s, %s]",
-                        symbol, source_name, fetch_start, end,
+                        symbol, source_name, fetch_from, end,
                     )
-                    df = await source.fetch(symbol, fetch_start, end)
+                    df = await source.fetch(symbol, fetch_from, end)
                     if not df.empty:
                         await upsert_kline(pool, symbol, df, source_name)
                         logger.info(
