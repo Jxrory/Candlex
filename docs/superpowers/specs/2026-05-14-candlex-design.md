@@ -93,6 +93,76 @@ SELECT create_hypertable('kline_data', 'date');
 | DB 连接失败 | 服务不可用 | 503 |
 | 源不可用+无缓存 | 空数组，降级不报错 | 200 |
 
+## 交易日历
+
+### 用途
+
+避免非交易日（周末、节假日）触发不必要的 akshare 请求。请求的 start/end 参数自动修正到最近的交易日。
+
+### 数据来源
+
+`ak.tool_trade_date_hist_sina()` — 新浪财经-交易日历-历史数据，一次性返回全部历史交易日。
+
+### 数据库
+
+```sql
+CREATE TABLE trade_calendar (
+    trade_date  DATE  PRIMARY KEY,
+    updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+SELECT create_hypertable('trade_calendar', 'trade_date', if_not_exists => TRUE);
+```
+
+### 日期修正逻辑
+
+| 输入 | 修正 | 说明 |
+|------|------|------|
+| start=周六 | → 下一个周一 | 向后推到最近交易日 |
+| end=周日 | → 前一个周五 | 向前推到最近交易日 |
+| 已是交易日 | 不变 | |
+
+```sql
+-- 向后推: 取 >= start 的最小交易日
+SELECT MIN(trade_date) FROM trade_calendar WHERE trade_date >= :start;
+
+-- 向前推: 取 <= end 的最大交易日
+SELECT MAX(trade_date) FROM trade_calendar WHERE trade_date <= :end;
+```
+
+### CalendarService
+
+启动时将全量交易日加载到内存 `set[date]`，所有查询走内存 O(log n) 查找：
+
+- `nearest_forward(d) -> date` — d 或之后第一个交易日（bisect_right）
+- `nearest_backward(d) -> date` — d 或之前最后一个交易日（bisect_left - 1）
+- `get_range(start, end) -> list[date]` — 区间内全部交易日
+
+### 刷新策略
+
+| 场景 | 行为 |
+|------|------|
+| 启动时表为空 | 从 akshare 拉取全量写入 |
+| 每日首次请求 | 检查 `MAX(trade_date)` < 当天，若需则全量重新拉取覆盖（upsert） |
+| 历史数据 | 永不过期（交易日历历史上不会变） |
+
+## Calendar API
+
+### `GET /calendar`
+
+参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| start | date | 否 | 起始日期，默认今年初 |
+| end | date | 否 | 截止日期，默认今年末 |
+
+返回：
+
+```json
+["2026-01-05", "2026-01-06", "2026-01-07"]
+```
+
 ## 项目结构
 
 ```
@@ -101,18 +171,24 @@ candlex/
 │   ├── main.py
 │   ├── config.py
 │   ├── database.py
-│   ├── models/
-│   │   ├── kline.py
-│   │   └── schemas.py
-│   ├── router.py
-│   ├── service.py
+│   ├── schemas.py
+│   ├── router.py          # + /calendar 路由
+│   ├── service.py         # + 日期修正逻辑
+│   ├── calendar.py         # 新增: CalendarService
 │   └── sources/
 │       ├── base.py
 │       ├── sina.py
 │       ├── tencent.py
 │       └── eastmoney.py
 ├── scripts/
-│   └── init_db.sql
+│   └── init_db.sql        # + trade_calendar 表
+├── tests/
+│   ├── conftest.py
+│   ├── test_service.py
+│   ├── test_router.py
+│   └── test_calendar.py    # 新增
 ├── pyproject.toml
 └── Dockerfile
 ```
+
+
