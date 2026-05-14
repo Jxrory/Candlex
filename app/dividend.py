@@ -1,7 +1,6 @@
 import logging
 from datetime import date, timedelta
 import asyncpg
-import pandas as pd
 
 from app.database import get_pool
 from app.schemas import DividendRecord
@@ -104,6 +103,9 @@ class DividendService:
         if df.empty:
             return 0
 
+        ex_dates = [row["ex_date"] for _, row in df.iterrows()]
+        prev_close_map = await self._batch_get_prev_close(pool, symbol, ex_dates)
+
         rows: list[tuple] = []
         for _, row in df.iterrows():
             ex_date = row["ex_date"]
@@ -114,7 +116,7 @@ class DividendService:
             rp = row["rights_price"]
             et = row["event_type"]
 
-            prev_close = await self._get_prev_close(pool, symbol, ex_date)
+            prev_close = prev_close_map.get(ex_date)
             adj = None
             if prev_close is not None:
                 adj = _adjustment_ratio(prev_close, cd, sd, cap, rr, rp)
@@ -134,6 +136,24 @@ class DividendService:
                 rows,
             )
         return len(rows)
+
+    async def _batch_get_prev_close(
+        self, pool: asyncpg.Pool, symbol: str, ex_dates: list[date]
+    ) -> dict[date, float | None]:
+        if not ex_dates:
+            return {}
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT d.ex_date, k.close FROM
+                   (SELECT unnest($2::date[]) AS ex_date) d
+                   LEFT JOIN LATERAL (
+                       SELECT close FROM kline_data
+                       WHERE symbol = $1 AND date < d.ex_date
+                       ORDER BY date DESC LIMIT 1
+                   ) k ON true""",
+                symbol, ex_dates,
+            )
+        return {r["ex_date"]: float(r["close"]) if r["close"] is not None else None for r in rows}
 
     async def _get_prev_close(
         self, pool: asyncpg.Pool, symbol: str, ex_date: date
