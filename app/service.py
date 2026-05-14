@@ -61,6 +61,11 @@ def _to_date(val) -> date:
 
 
 def _df_to_rows(df: pd.DataFrame, symbol: str, source: str) -> list[tuple]:
+    if not df.empty:
+        logger.info("_df_to_rows source=%s symbol=%s shape=%s date_col_dtype=%s first_date=%s type=%s",
+                     source, symbol, df.shape, df["date"].dtype,
+                     df["date"].iloc[0] if len(df) > 0 else "N/A",
+                     type(df["date"].iloc[0]).__name__ if len(df) > 0 else "N/A")
     rows: list[tuple] = []
     for _, row in df.iterrows():
         rows.append((
@@ -85,6 +90,9 @@ async def upsert_kline(
     if df.empty:
         return
     rows = _df_to_rows(df, symbol, source)
+    if rows:
+        logger.info("upsert_kline symbol=%s source=%s rows=%d first_date=%s",
+                     symbol, source, len(rows), rows[0][1])
     async with pool.acquire() as conn:
         await conn.executemany(
             """INSERT INTO kline_data

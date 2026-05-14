@@ -27,7 +27,8 @@ class TencentSource(BaseSource):
         if raw.empty:
             logger.warning("tencent raw data empty for %s", tx_symbol)
             return pd.DataFrame()
-        logger.info("tencent raw got %d rows for %s", len(raw), tx_symbol)
+        logger.info("tencent raw got %d rows for %s, date dtype=%s sample=%s",
+                     len(raw), tx_symbol, raw["date"].dtype, list(raw["date"][:3]))
 
         logger.info("tencent fetch qfq %s", tx_symbol)
         raw_qfq = ak.stock_zh_a_hist_tx(
@@ -50,5 +51,6 @@ class TencentSource(BaseSource):
         result["factor_hfq"] = (result["close_hfq"] / result["close"]).round(6)
         result.drop(columns=["close_qfq", "close_hfq"], inplace=True)
 
-        logger.info("tencent returning %d rows for %s", len(result), tx_symbol)
+        logger.info("tencent returning %d rows, date dtype=%s sample=%s",
+                     len(result), result["date"].dtype, list(result["date"][:3]))
         return result

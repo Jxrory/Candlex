@@ -27,7 +27,8 @@ class SinaSource(BaseSource):
         if raw.empty:
             logger.warning("sina raw data empty for %s", sina_symbol)
             return pd.DataFrame()
-        logger.info("sina raw got %d rows for %s", len(raw), sina_symbol)
+        logger.info("sina raw got %d rows for %s, index type=%s, index sample=%s",
+                     len(raw), sina_symbol, type(raw.index), list(raw.index[:3]))
 
         logger.info("sina fetch qfq-factor %s", sina_symbol)
         factor_qfq = ak.stock_zh_a_daily(
@@ -38,9 +39,13 @@ class SinaSource(BaseSource):
             symbol=sina_symbol, start_date=start_str, end_date=end_str, adjust="hfq-factor"
         )
 
+        logger.info("sina factor_qfq cols=%s shape=%s", list(factor_qfq.columns), factor_qfq.shape)
+        logger.info("sina factor_hfq cols=%s shape=%s", list(factor_hfq.columns), factor_hfq.shape)
+
         result = raw[["open", "high", "low", "close", "volume", "amount"]].copy()
         result["date"] = raw.index
         result.reset_index(drop=True, inplace=True)
+        logger.info("sina result date dtypes=%s sample=%s", result["date"].dtype, list(result["date"][:3]))
 
         factor_qfq["date"] = pd.to_datetime(factor_qfq["date"]).dt.date
         factor_hfq["date"] = pd.to_datetime(factor_hfq["date"]).dt.date
@@ -61,5 +66,7 @@ class SinaSource(BaseSource):
             ["factor_qfq", "factor_hfq"]
         ].ffill()
 
-        logger.info("sina returning %d rows for %s", len(result), sina_symbol)
+        logger.info("sina returning %d rows, date dtype=%s sample=%s, factor_qfq sample=%s",
+                     len(result), result["date"].dtype,
+                     list(result["date"][:3]), list(result["factor_qfq"][:3]))
         return result

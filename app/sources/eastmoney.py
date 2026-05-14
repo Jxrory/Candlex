@@ -38,7 +38,8 @@ class EastMoneySource(BaseSource):
         if raw.empty:
             logger.warning("eastmoney raw data empty for %s", code)
             return pd.DataFrame()
-        logger.info("eastmoney raw got %d rows for %s", len(raw), code)
+        logger.info("eastmoney raw got %d rows for %s, date dtype=%s sample=%s",
+                     len(raw), code, raw["日期"].dtype, list(raw["日期"][:3]))
 
         logger.info("eastmoney fetch qfq %s", code)
         raw_qfq = ak.stock_zh_a_hist(
@@ -67,5 +68,6 @@ class EastMoneySource(BaseSource):
         result["factor_hfq"] = (result["close_hfq"] / result["close"]).round(6)
         result.drop(columns=["close_qfq", "close_hfq"], inplace=True)
 
-        logger.info("eastmoney returning %d rows for %s", len(result), code)
+        logger.info("eastmoney returning %d rows, date dtype=%s sample=%s",
+                     len(result), result["date"].dtype, list(result["date"][:3]))
         return result[["date", "open", "high", "low", "close", "volume", "amount", "factor_qfq", "factor_hfq"]]
