@@ -6,34 +6,17 @@ import pandas as pd
 
 from app.config import settings
 from app.calendar import calendar_service
+from app.dividend import dividend_service, compute_factor
 from app.database import get_pool
 from app.schemas import KlineRecord
 from app.sources.base import BaseSource
 from app.sources.sina import SinaSource
-from app.sources.tencent import TencentSource
-from app.sources.eastmoney import EastMoneySource
 
 logger = logging.getLogger(__name__)
 
 SOURCES: dict[str, BaseSource] = {
     "sina": SinaSource(),
-    # "tencent": TencentSource(),
-    # "eastmoney": EastMoneySource(),
 }
-
-
-def _needs_refresh(updated_at: datetime | None, target_date: date, today: date) -> bool:
-    if updated_at is None:
-        return True
-    days_ago = (today - target_date).days
-    if days_ago == 0:
-        ttl = settings.cache_ttl_today_seconds
-    elif days_ago <= settings.cache_ttl_recent_days:
-        ttl = settings.cache_ttl_recent_seconds
-    else:
-        return False
-    age = (datetime.now(timezone.utc) - updated_at).total_seconds()
-    return age > ttl
 
 
 async def query_cached(
@@ -41,8 +24,7 @@ async def query_cached(
 ) -> list[asyncpg.Record]:
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            """SELECT date, open, high, low, close, volume, amount,
-                      factor_qfq, factor_hfq, updated_at
+            """SELECT date, open, high, low, close, volume, amount
                FROM kline_data
                WHERE symbol = $1 AND date BETWEEN $2 AND $3
                ORDER BY date""",
@@ -62,11 +44,6 @@ def _to_date(val) -> date:
 
 
 def _df_to_rows(df: pd.DataFrame, symbol: str, source: str) -> list[tuple]:
-    if not df.empty:
-        logger.info("_df_to_rows source=%s symbol=%s shape=%s date_col_dtype=%s first_date=%s type=%s",
-                     source, symbol, df.shape, df["date"].dtype,
-                     df["date"].iloc[0] if len(df) > 0 else "N/A",
-                     type(df["date"].iloc[0]).__name__ if len(df) > 0 else "N/A")
     rows: list[tuple] = []
     for _, row in df.iterrows():
         rows.append((
@@ -78,8 +55,6 @@ def _df_to_rows(df: pd.DataFrame, symbol: str, source: str) -> list[tuple]:
             float(row["close"]) if pd.notna(row.get("close")) else None,
             int(row["volume"]) if pd.notna(row.get("volume")) else None,
             float(row["amount"]) if pd.notna(row.get("amount")) else None,
-            float(row["factor_qfq"]) if pd.notna(row.get("factor_qfq")) else None,
-            float(row["factor_hfq"]) if pd.notna(row.get("factor_hfq")) else None,
             source,
         ))
     return rows
@@ -91,47 +66,19 @@ async def upsert_kline(
     if df.empty:
         return
     rows = _df_to_rows(df, symbol, source)
-    if rows:
-        logger.info("upsert_kline symbol=%s source=%s rows=%d first_date=%s",
-                     symbol, source, len(rows), rows[0][1])
     async with pool.acquire() as conn:
         await conn.executemany(
             """INSERT INTO kline_data
-               (symbol, date, open, high, low, close, volume, amount,
-                factor_qfq, factor_hfq, source, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+               (symbol, date, open, high, low, close, volume, amount, source)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
                ON CONFLICT (symbol, date)
                DO UPDATE SET
                    open=EXCLUDED.open, high=EXCLUDED.high,
                    low=EXCLUDED.low, close=EXCLUDED.close,
                    volume=EXCLUDED.volume, amount=EXCLUDED.amount,
-                   factor_qfq=EXCLUDED.factor_qfq,
-                   factor_hfq=EXCLUDED.factor_hfq,
-                   source=EXCLUDED.source,
-                   updated_at=NOW()""",
+                   source=EXCLUDED.source""",
             rows,
         )
-
-
-def _apply_adjust(
-    records: list[KlineRecord], adjust: str | None
-) -> list[KlineRecord]:
-    if adjust not in ("qfq", "hfq"):
-        return records
-    factor_key = f"factor_{adjust}"
-    adjusted: list[KlineRecord] = []
-    for r in records:
-        factor = getattr(r, factor_key, None)
-        if factor and factor != 0:
-            adjusted.append(r.model_copy(update={
-                "open": round(r.open * factor, 3),
-                "high": round(r.high * factor, 3),
-                "low": round(r.low * factor, 3),
-                "close": round(r.close * factor, 3),
-            }))
-        else:
-            adjusted.append(r)
-    return adjusted
 
 
 def _rows_to_records(rows: list[asyncpg.Record]) -> list[KlineRecord]:
@@ -144,11 +91,28 @@ def _rows_to_records(rows: list[asyncpg.Record]) -> list[KlineRecord]:
             close=float(r["close"]) if r["close"] is not None else 0.0,
             volume=int(r["volume"]) if r["volume"] is not None else None,
             amount=float(r["amount"]) if r["amount"] is not None else None,
-            factor_qfq=float(r["factor_qfq"]) if r["factor_qfq"] is not None else None,
-            factor_hfq=float(r["factor_hfq"]) if r["factor_hfq"] is not None else None,
         )
         for r in rows
     ]
+
+
+def _apply_adjust(
+    records: list[KlineRecord], events: list, adj_map: dict[date, float], adjust: str
+) -> list[KlineRecord]:
+    pairs = [(e.ex_date, adj_map.get(e.ex_date, 1.0)) for e in events]
+    adjusted: list[KlineRecord] = []
+    for r in records:
+        factor = compute_factor(pairs, r.date, adjust)
+        if factor and factor != 1.0:
+            adjusted.append(r.model_copy(update={
+                "open": round(r.open * factor, 3),
+                "high": round(r.high * factor, 3),
+                "low": round(r.low * factor, 3),
+                "close": round(r.close * factor, 3),
+            }))
+        else:
+            adjusted.append(r)
+    return adjusted
 
 
 async def get_kline(
@@ -170,38 +134,16 @@ async def get_kline(
         cached_dates = [r["date"] for r in cached]
         min_cached = min(cached_dates)
         max_cached = max(cached_dates)
-        logger.info(
-            "%s cache HIT: %d records in [%s, %s] (cached range: %s ~ %s)",
-            symbol, len(cached), start, end, min_cached, max_cached,
-        )
 
         needs_fetch = False
         fetch_from = start
 
-        has_gap_before = start < min_cached
-        has_gap_after = end > max_cached
-
-        if has_gap_before or has_gap_after:
+        if start < min_cached:
             needs_fetch = True
-            if has_gap_before:
-                logger.info("%s cache GAP before: %s ~ %s", symbol, start, min_cached)
-            if has_gap_after:
-                logger.info("%s cache GAP after: %s ~ %s", symbol, max_cached, end)
-
-        refresh_needed = [
-            r["date"] for r in cached
-            if _needs_refresh(r["updated_at"], r["date"], today)
-        ]
-        if refresh_needed:
+            fetch_from = start
+        if end > max_cached:
             needs_fetch = True
-            if not has_gap_before and not has_gap_after:
-                fetch_from = min(refresh_needed)
-            else:
-                fetch_from = min(fetch_from, min(refresh_needed))
-            logger.warning(
-                "%s cache STALE: %d dates need refresh (earliest %s)",
-                symbol, len(refresh_needed), min(refresh_needed),
-            )
+            fetch_from = min(fetch_from, start)
 
         if needs_fetch:
             for source_name in settings.source_priority:
@@ -209,49 +151,25 @@ async def get_kline(
                 if not source:
                     continue
                 try:
-                    logger.info(
-                        "%s fetching from %s [%s, %s]",
-                        symbol, source_name, fetch_from, end,
-                    )
                     df = await source.fetch(symbol, fetch_from, end)
                     if not df.empty:
                         await upsert_kline(pool, symbol, df, source_name)
-                        logger.info(
-                            "%s upserted %d rows from %s",
-                            symbol, len(df), source_name,
-                        )
                         break
-                    logger.warning("%s %s returned empty", symbol, source_name)
                 except Exception as e:
-                    logger.error(
-                        "%s %s failed: %s", symbol, source_name, e,
-                    )
+                    logger.error("%s %s failed: %s", symbol, source_name, e)
                     continue
 
             cached = await query_cached(pool, symbol, start, end)
-        else:
-            logger.info("%s cache FRESH: no refresh needed", symbol)
     else:
-        logger.info("%s cache MISS: no data in [%s, %s]", symbol, start, end)
-
         for source_name in settings.source_priority:
             source = SOURCES.get(source_name)
             if not source:
                 continue
             try:
-                logger.info(
-                    "%s fetching from %s [%s, %s]",
-                    symbol, source_name, start, end,
-                )
                 df = await source.fetch(symbol, start, end)
                 if not df.empty:
                     await upsert_kline(pool, symbol, df, source_name)
-                    logger.info(
-                        "%s upserted %d rows from %s",
-                        symbol, len(df), source_name,
-                    )
                     break
-                logger.warning("%s %s returned empty", symbol, source_name)
             except Exception as e:
                 logger.error("%s %s failed: %s", symbol, source_name, e)
                 continue
@@ -259,4 +177,12 @@ async def get_kline(
         cached = await query_cached(pool, symbol, start, end)
 
     records = _rows_to_records(cached)
-    return _apply_adjust(records, adjust)
+
+    if adjust:
+        await dividend_service.ensure_fresh(pool, symbol)
+        events = await dividend_service.get_events(pool, symbol)
+        adj_map = await dividend_service.get_adj_ratios(pool, symbol)
+        if events:
+            records = _apply_adjust(records, events, adj_map, adjust)
+
+    return records
