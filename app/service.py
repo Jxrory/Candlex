@@ -50,12 +50,22 @@ async def query_cached(
     return rows
 
 
+def _to_date(val) -> date:
+    if isinstance(val, datetime):
+        return val.date()
+    if isinstance(val, date):
+        return val
+    if isinstance(val, pd.Timestamp):
+        return val.date()
+    return pd.Timestamp(val).date()
+
+
 def _df_to_rows(df: pd.DataFrame, symbol: str, source: str) -> list[tuple]:
     rows: list[tuple] = []
     for _, row in df.iterrows():
         rows.append((
             symbol,
-            row["date"],
+            _to_date(row["date"]),
             float(row["open"]) if pd.notna(row.get("open")) else None,
             float(row["high"]) if pd.notna(row.get("high")) else None,
             float(row["low"]) if pd.notna(row.get("low")) else None,

@@ -46,9 +46,6 @@ class SinaSource(BaseSource):
         factor_hfq["date"] = pd.to_datetime(factor_hfq["date"]).dt.date
 
         result = result.merge(
-            factor_qfq[["date", "qfq_factor"]], on="date", how="left"
-        )
-        result = result.merge(
             factor_hfq[["date", "hfq_factor"]], on="date", how="left"
         )
         result.rename(
@@ -59,5 +56,6 @@ class SinaSource(BaseSource):
             ["factor_qfq", "factor_hfq"]
         ].ffill()
 
+        result["date"] = pd.to_datetime(result["date"]).dt.date
         logger.info("sina returning %d rows for %s", len(result), sina_symbol)
         return result
