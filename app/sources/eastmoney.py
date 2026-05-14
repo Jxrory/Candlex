@@ -38,36 +38,10 @@ class EastMoneySource(BaseSource):
         if raw.empty:
             logger.warning("eastmoney raw data empty for %s", code)
             return pd.DataFrame()
-        logger.info("eastmoney raw got %d rows for %s, date dtype=%s sample=%s",
-                     len(raw), code, raw["日期"].dtype, list(raw["日期"][:3]))
-
-        logger.info("eastmoney fetch qfq %s", code)
-        raw_qfq = ak.stock_zh_a_hist(
-            symbol=code, period="daily",
-            start_date=start_str, end_date=end_str, adjust="qfq",
-        )
-        logger.info("eastmoney fetch hfq %s", code)
-        raw_hfq = ak.stock_zh_a_hist(
-            symbol=code, period="daily",
-            start_date=start_str, end_date=end_str, adjust="hfq",
-        )
 
         result = raw.rename(columns=COLUMN_MAP)
         result["date"] = pd.to_datetime(result["date"]).dt.date
 
-        raw_qfq = raw_qfq.rename(columns=COLUMN_MAP)[["date", "close"]].rename(
-            columns={"close": "close_qfq"}
-        )
-        raw_hfq = raw_hfq.rename(columns=COLUMN_MAP)[["date", "close"]].rename(
-            columns={"close": "close_hfq"}
-        )
-
-        result = result.merge(raw_qfq, on="date", how="left")
-        result = result.merge(raw_hfq, on="date", how="left")
-        result["factor_qfq"] = (result["close_qfq"] / result["close"]).round(6).fillna(1.0)
-        result["factor_hfq"] = (result["close_hfq"] / result["close"]).round(6).fillna(1.0)
-        result.drop(columns=["close_qfq", "close_hfq"], inplace=True)
-
         logger.info("eastmoney returning %d rows, date dtype=%s sample=%s",
                      len(result), result["date"].dtype, list(result["date"][:3]))
-        return result[["date", "open", "high", "low", "close", "volume", "amount", "factor_qfq", "factor_hfq"]]
+        return result[["date", "open", "high", "low", "close", "volume", "amount"]]
