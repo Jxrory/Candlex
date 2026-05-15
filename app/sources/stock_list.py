@@ -8,10 +8,10 @@ logger = logging.getLogger(__name__)
 
 
 def _code_to_exchange(code: str) -> str:
-    prefix = code[:3]
-    if prefix.startswith("6"):
+    first_char = code[0] if code else ""
+    if first_char == "6":
         return "SH"
-    elif prefix.startswith("0") or prefix.startswith("3"):
+    elif first_char in ("0", "3"):
         return "SZ"
     return "BJ"
 
