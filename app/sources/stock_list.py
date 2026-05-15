@@ -31,7 +31,7 @@ class StockListSource:
             return pd.DataFrame()
 
         logger.info("stock list source: fetching A-share list")
-        df = self._fetch_a_code_name()
+        df = await self._fetch_a_code_name()
         if df.empty:
             return pd.DataFrame()
 
