@@ -38,3 +38,18 @@ CREATE TABLE IF NOT EXISTS trade_calendar (
 );
 
 SELECT create_hypertable('trade_calendar', 'trade_date', if_not_exists => TRUE);
+
+CREATE TABLE IF NOT EXISTS api_request_log (
+    id          BIGSERIAL,
+    api_name    TEXT    NOT NULL,
+    symbol      TEXT,
+    params      JSONB,
+    status      TEXT    NOT NULL,
+    row_count   INTEGER,
+    duration_ms INTEGER,
+    error_msg   TEXT,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (id, created_at)
+);
+
+SELECT create_hypertable('api_request_log', 'created_at', if_not_exists => TRUE);
