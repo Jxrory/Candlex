@@ -66,7 +66,7 @@ async def lifespan(app: FastAPI):
     yield
     if _writer_task is not None:
         _writer_task.cancel()
-    scheduler.shutdown()
+    # scheduler.shutdown()
     await close_pool()
     logger.info("CandleX shut down")
 
