@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -7,6 +8,7 @@ from fastapi import FastAPI
 from app.calendar import calendar_service
 from app.dividend import dividend_service
 from app.database import get_pool, close_pool
+from app.ak_trace import _log_writer
 from app.router import router
 from app.config import settings
 
@@ -18,6 +20,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
+_writer_task: asyncio.Task | None = None
 
 
 async def sync_all_dividends():
@@ -45,6 +48,8 @@ async def lifespan(app: FastAPI):
     logger.info("CandleX starting up")
     await calendar_service.load()
     await get_pool()
+    global _writer_task
+    _writer_task = asyncio.create_task(_log_writer())
 
     # hour, minute = settings.dividend_sync_time.split(":")
     # scheduler.add_job(
@@ -59,6 +64,8 @@ async def lifespan(app: FastAPI):
     # logger.info("scheduler started, dividend sync at %s", settings.dividend_sync_time)
 
     yield
+    if _writer_task is not None:
+        _writer_task.cancel()
     scheduler.shutdown()
     await close_pool()
     logger.info("CandleX shut down")
