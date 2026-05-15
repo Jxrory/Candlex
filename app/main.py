@@ -11,7 +11,7 @@ from app.router import router
 from app.config import settings
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
@@ -46,17 +46,17 @@ async def lifespan(app: FastAPI):
     await calendar_service.load()
     await get_pool()
 
-    hour, minute = settings.dividend_sync_time.split(":")
-    scheduler.add_job(
-        sync_all_dividends,
-        trigger="cron",
-        hour=int(hour),
-        minute=int(minute),
-        id="sync_dividends",
-        replace_existing=True,
-    )
-    scheduler.start()
-    logger.info("scheduler started, dividend sync at %s", settings.dividend_sync_time)
+    # hour, minute = settings.dividend_sync_time.split(":")
+    # scheduler.add_job(
+    #     sync_all_dividends,
+    #     trigger="cron",
+    #     hour=int(hour),
+    #     minute=int(minute),
+    #     id="sync_dividends",
+    #     replace_existing=True,
+    # )
+    # scheduler.start()
+    # logger.info("scheduler started, dividend sync at %s", settings.dividend_sync_time)
 
     yield
     scheduler.shutdown()

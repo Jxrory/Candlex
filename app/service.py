@@ -179,7 +179,6 @@ async def get_kline(
     records = _rows_to_records(cached)
 
     if adjust:
-        await dividend_service.ensure_fresh(pool, symbol)
         events = await dividend_service.get_events(pool, symbol)
         adj_map = await dividend_service.get_adj_ratios(pool, symbol)
         if events:
