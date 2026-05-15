@@ -1,8 +1,6 @@
 import logging
 import asyncpg
-import pandas as pd
 
-from app.database import get_pool
 from app.schemas import StockInfoRecord
 from app.sources.stock_list import StockListSource
 
