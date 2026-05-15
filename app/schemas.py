@@ -20,3 +20,13 @@ class DividendRecord(BaseModel):
     rights_ratio: float | None = None
     rights_price: float | None = None
     event_type: str
+
+
+class StockInfoRecord(BaseModel):
+    symbol: str
+    name: str
+    market: str
+    list_date: date | None = None
+    list_status: str | None = None
+    industry: str | None = None
+    sector: str | None = None

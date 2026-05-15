@@ -53,3 +53,16 @@ CREATE TABLE IF NOT EXISTS api_request_log (
 );
 
 SELECT create_hypertable('api_request_log', 'created_at', if_not_exists => TRUE);
+
+CREATE TABLE IF NOT EXISTS stock_info (
+    symbol       TEXT    NOT NULL PRIMARY KEY,
+    name         TEXT    NOT NULL,
+    market       TEXT    NOT NULL,
+    list_date    DATE,
+    list_status  TEXT,
+    industry     TEXT,
+    sector       TEXT,
+    updated_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_stock_info_market ON stock_info (market);
