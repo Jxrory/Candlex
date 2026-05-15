@@ -1,5 +1,7 @@
 import logging
+
 import asyncpg
+import pandas as pd
 
 from app.schemas import StockInfoRecord
 from app.sources.stock_list import StockListSource
@@ -42,16 +44,19 @@ class StockListService:
         if df.empty:
             return 0
 
+        def _nan(val):
+            return None if pd.isna(val) else val
+
         rows: list[tuple] = []
         for _, row in df.iterrows():
             rows.append((
                 row["symbol"],
                 row["name"],
                 row["market"],
-                row.get("list_date"),
-                row.get("list_status"),
-                row.get("industry"),
-                row.get("sector"),
+                _nan(row.get("list_date")),
+                _nan(row.get("list_status")),
+                _nan(row.get("industry")),
+                _nan(row.get("sector")),
             ))
 
         async with pool.acquire() as conn:
