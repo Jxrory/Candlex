@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from app.calendar import calendar_service
 from app.dividend import dividend_service
+from app.stock_list import stock_list_service
 from app.database import get_pool, close_pool
 from app.ak_trace import _log_writer
 from app.router import router
@@ -43,6 +44,16 @@ async def sync_all_dividends():
     logger.info("scheduled task: dividend sync complete")
 
 
+async def sync_stock_list():
+    logger.info("scheduled task: sync stock list")
+    pool = await get_pool()
+    try:
+        count = await stock_list_service.sync(pool, "ZH_A")
+        logger.info("scheduled task: synced %d stock records", count)
+    except Exception as e:
+        logger.error("scheduled task: stock list sync failed: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("CandleX starting up")
@@ -63,10 +74,22 @@ async def lifespan(app: FastAPI):
     # scheduler.start()
     # logger.info("scheduler started, dividend sync at %s", settings.dividend_sync_time)
 
+    scheduler.add_job(
+        sync_stock_list,
+        trigger="cron",
+        day=15,
+        hour=8,
+        minute=30,
+        id="sync_stock_list",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info("scheduler started, stock list sync at 08:30 on day 15")
+
     yield
     if _writer_task is not None:
         _writer_task.cancel()
-    # scheduler.shutdown()
+    scheduler.shutdown()
     await close_pool()
     logger.info("CandleX shut down")
 
