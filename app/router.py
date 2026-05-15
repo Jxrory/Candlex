@@ -52,7 +52,6 @@ async def dividend(
 ):
     logger.info("GET /dividend/%s start=%s end=%s", symbol, start, end)
     pool = await get_pool()
-    await dividend_service.ensure_fresh(pool, symbol)
     records = await dividend_service.get_events(pool, symbol, start, end)
     logger.info("GET /dividend/%s returned %d records", symbol, len(records))
     return records
