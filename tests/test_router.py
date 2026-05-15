@@ -32,3 +32,8 @@ def test_dividend_bad_symbol():
 def test_dividend_date_range():
     resp = client.get("/dividend/SH.600519?start=2023-01-01&end=2023-12-31")
     assert resp.status_code == 200
+
+
+def test_dividend_refresh():
+    resp = client.get("/dividend/SH.600519?refresh=true")
+    assert resp.status_code == 200
