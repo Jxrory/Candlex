@@ -3,6 +3,7 @@ from datetime import date
 import akshare as ak
 import pandas as pd
 
+from app.ak_trace import trace_akshare
 from app.sources.base import BaseSource
 
 logger = logging.getLogger(__name__)
@@ -16,6 +17,14 @@ class DividendSource(BaseSource):
     def _to_raw_code(self, symbol: str) -> str:
         return symbol.split(".")[1]
 
+    @trace_akshare("stock_history_dividend_detail")
+    def _fetch_dividend(self, code: str) -> pd.DataFrame:
+        return ak.stock_history_dividend_detail(symbol=code, indicator="分红", date="")
+
+    @trace_akshare("stock_history_dividend_detail")
+    def _fetch_rights(self, code: str) -> pd.DataFrame:
+        return ak.stock_history_dividend_detail(symbol=code, indicator="配股", date="")
+
     async def fetch(
         self, symbol: str, start_date: date | None = None, end_date: date | None = None
     ) -> pd.DataFrame:
@@ -23,14 +32,14 @@ class DividendSource(BaseSource):
 
         logger.info("dividend source fetch dividend %s", code)
         try:
-            div = ak.stock_history_dividend_detail(symbol=code, indicator="分红", date="")
+            div = await self._fetch_dividend(code)
         except Exception as e:
             logger.error("dividend fetch failed for %s: %s", code, e)
             return pd.DataFrame()
 
         logger.info("dividend source fetch rights %s", code)
         try:
-            rights = ak.stock_history_dividend_detail(symbol=code, indicator="配股", date="")
+            rights = await self._fetch_rights(code)
         except Exception as e:
             logger.error("rights fetch failed for %s: %s", code, e)
             rights = pd.DataFrame()

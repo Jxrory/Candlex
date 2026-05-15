@@ -6,10 +6,16 @@ import akshare as ak
 import asyncpg
 import pandas as pd
 
+from app.ak_trace import trace_akshare
 from app.config import settings
 from app.database import get_pool
 
 logger = logging.getLogger(__name__)
+
+
+@trace_akshare("tool_trade_date_hist_sina")
+def _fetch_all() -> pd.DataFrame:
+    return ak.tool_trade_date_hist_sina()
 
 
 class CalendarService:
@@ -45,7 +51,7 @@ class CalendarService:
 
     async def _sync(self, pool: asyncpg.Pool) -> None:
         logger.info("fetching trading calendar from akshare")
-        df = ak.tool_trade_date_hist_sina()
+        df = await _fetch_all()
         logger.info("akshare returned %d trading days, columns=%s", len(df), list(df.columns))
         rows = [(d,) for d in df["trade_date"]]
         logger.info("calendar upsert starting (%d rows)...", len(rows))

@@ -3,6 +3,7 @@ from datetime import date
 import akshare as ak
 import pandas as pd
 
+from app.ak_trace import trace_akshare
 from app.sources.base import BaseSource
 
 logger = logging.getLogger(__name__)
@@ -13,6 +14,7 @@ class SinaSource(BaseSource):
     def name(self) -> str:
         return "sina"
 
+    @trace_akshare("stock_zh_a_daily")
     async def fetch(
         self, symbol: str, start_date: date, end_date: date
     ) -> pd.DataFrame:
