@@ -5,8 +5,9 @@ from fastapi import APIRouter, Query, Path
 from app.calendar import calendar_service
 from app.dividend import dividend_service
 from app.database import get_pool
-from app.schemas import KlineRecord, DividendRecord
+from app.schemas import KlineRecord, DividendRecord, StockInfoRecord
 from app.service import get_kline
+from app.stock_list import stock_list_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -57,4 +58,20 @@ async def dividend(
         await dividend_service.sync_symbol(pool, symbol)
     records = await dividend_service.get_events(pool, symbol, start, end)
     logger.info("GET /dividend/%s returned %d records", symbol, len(records))
+    return records
+
+
+@router.get("/stocks", response_model=list[StockInfoRecord])
+async def stocks(
+    market: str | None = Query(None),
+    refresh: bool = Query(False),
+):
+    logger.info("GET /stocks market=%s refresh=%s", market, refresh)
+    pool = await get_pool()
+    if refresh:
+        market_to_sync = market or "ZH_A"
+        count = await stock_list_service.sync(pool, market_to_sync)
+        logger.info("GET /stocks sync completed: %d records for %s", count, market_to_sync)
+    records = await stock_list_service.get_stocks(pool, market)
+    logger.info("GET /stocks returned %d records", len(records))
     return records
