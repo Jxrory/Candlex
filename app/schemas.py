@@ -36,3 +36,9 @@ class FinancialIndicatorRecord(BaseModel):
     symbol: str
     report_date: date
     data: dict
+
+
+class BalanceSheetRecord(BaseModel):
+    symbol: str
+    report_date: date
+    data: dict
