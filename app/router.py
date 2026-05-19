@@ -5,9 +5,10 @@ from fastapi import APIRouter, Query, Path
 from app.calendar import calendar_service
 from app.dividend import dividend_service
 from app.database import get_pool
-from app.schemas import KlineRecord, DividendRecord, StockInfoRecord
+from app.schemas import KlineRecord, DividendRecord, StockInfoRecord, FinancialIndicatorRecord
 from app.service import get_kline
 from app.stock_list import stock_list_service
+from app.financial_indicator import financial_indicator_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -74,4 +75,21 @@ async def stocks(
         logger.info("GET /stocks sync completed: %d records for %s", count, market_to_sync)
     records = await stock_list_service.get_stocks(pool, market)
     logger.info("GET /stocks returned %d records", len(records))
+    return records
+
+
+@router.get("/indicator/{symbol}", response_model=list[FinancialIndicatorRecord])
+async def indicator(
+    symbol: str = Path(pattern=r"^(SH|SZ|BJ)\.[0-9]{6}$"),
+    start: date | None = Query(None),
+    end: date | None = Query(None),
+    refresh: bool = Query(False),
+):
+    logger.info("GET /indicator/%s refresh=%s start=%s end=%s", symbol, refresh, start, end)
+    pool = await get_pool()
+    if refresh:
+        count = await financial_indicator_service.sync_symbol(pool, symbol)
+        logger.info("GET /indicator/%s sync completed: %d records", symbol, count)
+    records = await financial_indicator_service.get_indicators(pool, symbol, start, end)
+    logger.info("GET /indicator/%s returned %d records", symbol, len(records))
     return records
