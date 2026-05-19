@@ -30,3 +30,9 @@ class StockInfoRecord(BaseModel):
     list_status: str | None = None
     industry: str | None = None
     sector: str | None = None
+
+
+class FinancialIndicatorRecord(BaseModel):
+    symbol: str
+    report_date: date
+    data: dict
