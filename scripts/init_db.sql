@@ -66,3 +66,12 @@ CREATE TABLE IF NOT EXISTS stock_info (
 );
 
 CREATE INDEX IF NOT EXISTS idx_stock_info_market ON stock_info (market);
+
+CREATE TABLE IF NOT EXISTS financial_indicators (
+    symbol       TEXT    NOT NULL,
+    report_date  DATE    NOT NULL,
+    data         JSONB   NOT NULL,
+    source       TEXT    NOT NULL,
+    updated_at   TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (symbol, report_date)
+);
