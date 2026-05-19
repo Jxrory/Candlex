@@ -16,8 +16,12 @@ def _extract_symbol(api_name: str, args: tuple, kwargs: dict) -> str | None:
     if "symbol" in kwargs:
         return kwargs["symbol"]
     for arg in args:
-        if isinstance(arg, str) and "." in arg and arg.split(".")[0] in ("SH", "SZ", "BJ"):
-            return arg
+        if isinstance(arg, str) and "." in arg:
+            parts = arg.split(".")
+            if parts[0] in ("SH", "SZ", "BJ"):
+                return arg
+            if len(parts) == 2 and parts[1] in ("SH", "SZ", "BJ") and parts[0].isdigit() and len(parts[0]) == 6:
+                return arg
     if api_name == "stock_history_dividend_detail":
         for arg in args:
             if isinstance(arg, str) and arg.isdigit() and len(arg) == 6:
@@ -41,6 +45,10 @@ def _extract_params(api_name: str, args: tuple, kwargs: dict) -> dict:
         if len(args) >= 1:
             params["symbol"] = str(args[0])
         params.setdefault("indicator", kwargs.get("indicator"))
+    elif api_name == "stock_financial_analysis_indicator_em":
+        if "symbol" not in params and len(args) >= 1:
+            params["symbol"] = str(args[-1])
+        params.setdefault("indicator", kwargs.get("indicator", "按报告期"))
     return params
 
 

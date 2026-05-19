@@ -44,8 +44,7 @@ class FinancialIndicatorSource:
             rd = row[report_date_col]
             if pd.isna(rd):
                 continue
-            if hasattr(rd, "date"):
-                rd = rd.date()
+            rd = pd.to_datetime(rd).date()
 
             row_dict = row.drop(report_date_col).to_dict()
             cleaned = {}
