@@ -14,11 +14,12 @@ class FinancialIndicatorSource:
         return "financial_indicator_em"
 
     def _to_raw_code(self, symbol: str) -> str:
-        return symbol.split(".")[1]
+        parts = symbol.split(".")
+        return f"{parts[1]}.{parts[0]}"
 
     @trace_akshare("stock_financial_analysis_indicator_em")
     def _fetch(self, code: str) -> pd.DataFrame:
-        return ak.stock_financial_analysis_indicator_em(symbol=code, indicator="单季报")
+        return ak.stock_financial_analysis_indicator_em(symbol=code, indicator="按报告期")
 
     async def fetch(self, symbol: str) -> pd.DataFrame:
         code = self._to_raw_code(symbol)
