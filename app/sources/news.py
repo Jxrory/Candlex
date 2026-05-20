@@ -32,7 +32,10 @@ class NewsSource:
         for _, row in df.iterrows():
             publish_time = None
             if pd.notna(row.get("发布时间")):
-                publish_time = pd.to_datetime(row["发布时间"]).to_pydatetime()
+                ts = pd.to_datetime(row["发布时间"])
+                if ts.tz is None:
+                    ts = ts.tz_localize("Asia/Shanghai")
+                publish_time = ts.to_pydatetime()
 
             rows.append({
                 "symbol": symbol,
