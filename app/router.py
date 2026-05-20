@@ -66,6 +66,13 @@ async def dividend(
     if refresh:
         await dividend_service.sync_symbol(pool, symbol)
     records = await dividend_service.get_events(pool, symbol, start, end)
+
+    if not records and not refresh:
+        logger.info("GET /dividend/%s no cached data, auto-syncing", symbol)
+        count = await dividend_service.sync_symbol(pool, symbol)
+        logger.info("GET /dividend/%s auto-sync completed: %d records", symbol, count)
+        records = await dividend_service.get_events(pool, symbol, start, end)
+
     logger.info("GET /dividend/%s returned %d records", symbol, len(records))
     return records
 
@@ -99,6 +106,13 @@ async def indicator(
         count = await financial_indicator_service.sync_symbol(pool, symbol)
         logger.info("GET /indicator/%s sync completed: %d records", symbol, count)
     records = await financial_indicator_service.get_indicators(pool, symbol, start, end)
+
+    if not records and not refresh:
+        logger.info("GET /indicator/%s no cached data, auto-syncing", symbol)
+        count = await financial_indicator_service.sync_symbol(pool, symbol)
+        logger.info("GET /indicator/%s auto-sync completed: %d records", symbol, count)
+        records = await financial_indicator_service.get_indicators(pool, symbol, start, end)
+
     logger.info("GET /indicator/%s returned %d records", symbol, len(records))
     return records
 
@@ -116,6 +130,13 @@ async def balance(
         count = await balance_sheet_service.sync_symbol(pool, symbol)
         logger.info("GET /balance/%s sync completed: %d records", symbol, count)
     records = await balance_sheet_service.get_balance_sheets(pool, symbol, start, end)
+
+    if not records and not refresh:
+        logger.info("GET /balance/%s no cached data, auto-syncing", symbol)
+        count = await balance_sheet_service.sync_symbol(pool, symbol)
+        logger.info("GET /balance/%s auto-sync completed: %d records", symbol, count)
+        records = await balance_sheet_service.get_balance_sheets(pool, symbol, start, end)
+
     logger.info("GET /balance/%s returned %d records", symbol, len(records))
     return records
 
@@ -133,6 +154,13 @@ async def profit(
         count = await profit_sheet_service.sync_symbol(pool, symbol)
         logger.info("GET /profit/%s sync completed: %d records", symbol, count)
     records = await profit_sheet_service.get_profit_sheets(pool, symbol, start, end)
+
+    if not records and not refresh:
+        logger.info("GET /profit/%s no cached data, auto-syncing", symbol)
+        count = await profit_sheet_service.sync_symbol(pool, symbol)
+        logger.info("GET /profit/%s auto-sync completed: %d records", symbol, count)
+        records = await profit_sheet_service.get_profit_sheets(pool, symbol, start, end)
+
     logger.info("GET /profit/%s returned %d records", symbol, len(records))
     return records
 
@@ -150,6 +178,13 @@ async def cash_flow(
         count = await cash_flow_sheet_service.sync_symbol(pool, symbol)
         logger.info("GET /cash-flow/%s sync completed: %d records", symbol, count)
     records = await cash_flow_sheet_service.get_cash_flow_sheets(pool, symbol, start, end)
+
+    if not records and not refresh:
+        logger.info("GET /cash-flow/%s no cached data, auto-syncing", symbol)
+        count = await cash_flow_sheet_service.sync_symbol(pool, symbol)
+        logger.info("GET /cash-flow/%s auto-sync completed: %d records", symbol, count)
+        records = await cash_flow_sheet_service.get_cash_flow_sheets(pool, symbol, start, end)
+
     logger.info("GET /cash-flow/%s returned %d records", symbol, len(records))
     return records
 
@@ -167,5 +202,12 @@ async def news(
         count = await news_service.sync_symbol(pool, symbol)
         logger.info("GET /news/%s sync completed: %d records", symbol, count)
     records = await news_service.get_news(pool, symbol, start, end)
+
+    if not records and not refresh:
+        logger.info("GET /news/%s no cached data, auto-syncing", symbol)
+        count = await news_service.sync_symbol(pool, symbol)
+        logger.info("GET /news/%s auto-sync completed: %d records", symbol, count)
+        records = await news_service.get_news(pool, symbol, start, end)
+
     logger.info("GET /news/%s returned %d records", symbol, len(records))
     return records
