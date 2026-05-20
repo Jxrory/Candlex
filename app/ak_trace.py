@@ -52,6 +52,9 @@ def _extract_params(api_name: str, args: tuple, kwargs: dict) -> dict:
     elif api_name == "stock_balance_sheet_by_report_em":
         if "symbol" not in params and len(args) >= 1:
             params["symbol"] = str(args[-1])
+    elif api_name == "stock_profit_sheet_by_report_em":
+        if "symbol" not in params and len(args) >= 1:
+            params["symbol"] = str(args[-1])
     return params
 
 

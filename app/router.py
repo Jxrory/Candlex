@@ -5,11 +5,15 @@ from fastapi import APIRouter, Query, Path
 from app.calendar import calendar_service
 from app.dividend import dividend_service
 from app.database import get_pool
-from app.schemas import KlineRecord, DividendRecord, StockInfoRecord, FinancialIndicatorRecord, BalanceSheetRecord
+from app.schemas import (
+    KlineRecord, DividendRecord, StockInfoRecord,
+    FinancialIndicatorRecord, BalanceSheetRecord, ProfitSheetRecord,
+)
 from app.service import get_kline
 from app.stock_list import stock_list_service
 from app.financial_indicator import financial_indicator_service
 from app.balance_sheet import balance_sheet_service
+from app.profit_sheet import profit_sheet_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -110,4 +114,21 @@ async def balance(
         logger.info("GET /balance/%s sync completed: %d records", symbol, count)
     records = await balance_sheet_service.get_balance_sheets(pool, symbol, start, end)
     logger.info("GET /balance/%s returned %d records", symbol, len(records))
+    return records
+
+
+@router.get("/profit/{symbol}", response_model=list[ProfitSheetRecord])
+async def profit(
+    symbol: str = Path(pattern=r"^(SH|SZ|BJ)\.[0-9]{6}$"),
+    start: date | None = Query(None),
+    end: date | None = Query(None),
+    refresh: bool = Query(False),
+):
+    logger.info("GET /profit/%s refresh=%s start=%s end=%s", symbol, refresh, start, end)
+    pool = await get_pool()
+    if refresh:
+        count = await profit_sheet_service.sync_symbol(pool, symbol)
+        logger.info("GET /profit/%s sync completed: %d records", symbol, count)
+    records = await profit_sheet_service.get_profit_sheets(pool, symbol, start, end)
+    logger.info("GET /profit/%s returned %d records", symbol, len(records))
     return records

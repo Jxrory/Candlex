@@ -84,3 +84,12 @@ CREATE TABLE IF NOT EXISTS balance_sheets (
     updated_at   TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (symbol, report_date)
 );
+
+CREATE TABLE IF NOT EXISTS profit_sheets (
+    symbol       TEXT    NOT NULL,
+    report_date  DATE    NOT NULL,
+    data         JSONB   NOT NULL,
+    source       TEXT    NOT NULL,
+    updated_at   TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (symbol, report_date)
+);

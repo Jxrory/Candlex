@@ -42,3 +42,9 @@ class BalanceSheetRecord(BaseModel):
     symbol: str
     report_date: date
     data: dict
+
+
+class ProfitSheetRecord(BaseModel):
+    symbol: str
+    report_date: date
+    data: dict
