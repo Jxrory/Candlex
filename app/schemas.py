@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from pydantic import BaseModel
 
 
@@ -54,3 +54,12 @@ class CashFlowSheetRecord(BaseModel):
     symbol: str
     report_date: date
     data: dict
+
+
+class NewsRecord(BaseModel):
+    symbol: str
+    title: str
+    content: str
+    publish_time: datetime | None = None
+    source_name: str | None = None
+    url: str
