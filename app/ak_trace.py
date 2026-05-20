@@ -22,7 +22,7 @@ def _extract_symbol(api_name: str, args: tuple, kwargs: dict) -> str | None:
                 return arg
             if len(parts) == 2 and parts[1] in ("SH", "SZ", "BJ") and parts[0].isdigit() and len(parts[0]) == 6:
                 return arg
-    if api_name == "stock_history_dividend_detail":
+    if api_name in ("stock_history_dividend_detail", "stock_news_em"):
         for arg in args:
             if isinstance(arg, str) and arg.isdigit() and len(arg) == 6:
                 return arg
