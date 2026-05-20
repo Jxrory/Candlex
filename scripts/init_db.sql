@@ -102,3 +102,14 @@ CREATE TABLE IF NOT EXISTS cash_flow_sheets (
     updated_at   TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (symbol, report_date)
 );
+
+CREATE TABLE IF NOT EXISTS news (
+    symbol       TEXT    NOT NULL,
+    title        TEXT    NOT NULL,
+    content      TEXT    NOT NULL,
+    publish_time TIMESTAMPTZ,
+    source_name  TEXT,
+    url          TEXT    NOT NULL,
+    updated_at   TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (symbol, url)
+);
