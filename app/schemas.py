@@ -48,3 +48,9 @@ class ProfitSheetRecord(BaseModel):
     symbol: str
     report_date: date
     data: dict
+
+
+class CashFlowSheetRecord(BaseModel):
+    symbol: str
+    report_date: date
+    data: dict

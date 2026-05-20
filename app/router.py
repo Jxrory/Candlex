@@ -8,12 +8,14 @@ from app.database import get_pool
 from app.schemas import (
     KlineRecord, DividendRecord, StockInfoRecord,
     FinancialIndicatorRecord, BalanceSheetRecord, ProfitSheetRecord,
+    CashFlowSheetRecord,
 )
 from app.service import get_kline
 from app.stock_list import stock_list_service
 from app.financial_indicator import financial_indicator_service
 from app.balance_sheet import balance_sheet_service
 from app.profit_sheet import profit_sheet_service
+from app.cash_flow_sheet import cash_flow_sheet_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -131,4 +133,21 @@ async def profit(
         logger.info("GET /profit/%s sync completed: %d records", symbol, count)
     records = await profit_sheet_service.get_profit_sheets(pool, symbol, start, end)
     logger.info("GET /profit/%s returned %d records", symbol, len(records))
+    return records
+
+
+@router.get("/cash-flow/{symbol}", response_model=list[CashFlowSheetRecord])
+async def cash_flow(
+    symbol: str = Path(pattern=r"^(SH|SZ|BJ)\.[0-9]{6}$"),
+    start: date | None = Query(None),
+    end: date | None = Query(None),
+    refresh: bool = Query(False),
+):
+    logger.info("GET /cash-flow/%s refresh=%s start=%s end=%s", symbol, refresh, start, end)
+    pool = await get_pool()
+    if refresh:
+        count = await cash_flow_sheet_service.sync_symbol(pool, symbol)
+        logger.info("GET /cash-flow/%s sync completed: %d records", symbol, count)
+    records = await cash_flow_sheet_service.get_cash_flow_sheets(pool, symbol, start, end)
+    logger.info("GET /cash-flow/%s returned %d records", symbol, len(records))
     return records
