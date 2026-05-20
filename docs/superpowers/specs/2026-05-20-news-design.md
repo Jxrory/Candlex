@@ -64,12 +64,6 @@ Column mapping:
 - `get_news(pool, symbol, start, end)` — SELECT with optional datetime filters
 - `sync_symbol(pool, symbol)` — fetch from akshare, upsert into DB
 
-## Auto-sync on empty DB
-
-When `refresh=false` but DB returns no records for the requested symbol, the route handler calls `sync_symbol` automatically before returning. This ensures the endpoint always returns data if akshare has it, regardless of the refresh flag.
-
-Same fix applied to existing endpoints: `/indicator/{symbol}`, `/balance/{symbol}`, `/profit/{symbol}`, `/cash-flow/{symbol}`.
-
 ## Files
 
 | File | Action |
