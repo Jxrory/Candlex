@@ -3,7 +3,7 @@ from typing import ClassVar
 
 
 class Settings(BaseSettings):
-    db_dsn: str = "postgresql://user:password@192.168.1.10:5432/candlex"
+    db_dsn: str = "postgresql://user:password@127.0.0.1:5432/candlex"
     db_min_connections: int = 2
     db_max_connections: int = 10
 
