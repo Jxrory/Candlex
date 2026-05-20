@@ -1,5 +1,5 @@
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Query, Path
 
 from app.calendar import calendar_service
@@ -8,7 +8,7 @@ from app.database import get_pool
 from app.schemas import (
     KlineRecord, DividendRecord, StockInfoRecord,
     FinancialIndicatorRecord, BalanceSheetRecord, ProfitSheetRecord,
-    CashFlowSheetRecord,
+    CashFlowSheetRecord, NewsRecord,
 )
 from app.service import get_kline
 from app.stock_list import stock_list_service
@@ -16,6 +16,7 @@ from app.financial_indicator import financial_indicator_service
 from app.balance_sheet import balance_sheet_service
 from app.profit_sheet import profit_sheet_service
 from app.cash_flow_sheet import cash_flow_sheet_service
+from app.news import news_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -150,4 +151,21 @@ async def cash_flow(
         logger.info("GET /cash-flow/%s sync completed: %d records", symbol, count)
     records = await cash_flow_sheet_service.get_cash_flow_sheets(pool, symbol, start, end)
     logger.info("GET /cash-flow/%s returned %d records", symbol, len(records))
+    return records
+
+
+@router.get("/news/{symbol}", response_model=list[NewsRecord])
+async def news(
+    symbol: str = Path(pattern=r"^(SH|SZ|BJ)\.[0-9]{6}$"),
+    start: datetime | None = Query(None),
+    end: datetime | None = Query(None),
+    refresh: bool = Query(False),
+):
+    logger.info("GET /news/%s refresh=%s start=%s end=%s", symbol, refresh, start, end)
+    pool = await get_pool()
+    if refresh:
+        count = await news_service.sync_symbol(pool, symbol)
+        logger.info("GET /news/%s sync completed: %d records", symbol, count)
+    records = await news_service.get_news(pool, symbol, start, end)
+    logger.info("GET /news/%s returned %d records", symbol, len(records))
     return records
