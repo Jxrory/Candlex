@@ -54,6 +54,28 @@ async def kline(
     return records
 
 
+@router.get("/indicators/{symbol}")
+async def indicators(
+    symbol: str = Path(pattern=r"^(SH|SZ|BJ)\.[0-9]{6}$"),
+    start: date | None = Query(None),
+    end: date | None = Query(None),
+    adjust: str | None = Query(None, pattern="^(qfq|hfq)$"),
+    i: list[str] = Query(default_factory=list),
+):
+    today = date.today()
+    if end is None:
+        end = today
+    if start is None:
+        start = today - timedelta(days=365)
+
+    logger.info("GET /indicators/%s start=%s end=%s adjust=%s i=%s", symbol, start, end, adjust, i)
+    from app.indicators_service import get_indicators, parse_specs
+    specs = parse_specs(i)
+    result = await get_indicators(symbol, start, end, adjust, specs)
+    logger.info("GET /indicators/%s returned %d records", symbol, len(result))
+    return result
+
+
 @router.get("/dividend/{symbol}", response_model=list[DividendRecord])
 async def dividend(
     symbol: str = Path(pattern=r"^(SH|SZ|BJ)\.[0-9]{6}$"),
