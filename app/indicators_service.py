@@ -1,7 +1,13 @@
 import json
 import logging
+from datetime import date
+from typing import Any
 
-from app.tools.indicators import IndicatorSpec, SUPPORTED
+import numpy as np
+import pandas as pd
+
+from app.service import get_kline
+from app.tools.indicators import IndicatorSpec, SUPPORTED, compute_many
 
 logger = logging.getLogger(__name__)
 
@@ -58,3 +64,20 @@ def parse_specs(raw: list[str]) -> list[IndicatorSpec]:
             seen.add(key)
             deduped.append(s)
     return deduped
+
+
+async def get_indicators(
+    symbol: str,
+    start: date,
+    end: date,
+    adjust: str | None = None,
+    specs: list[IndicatorSpec] | None = None,
+) -> list[dict[str, Any]]:
+    records = await get_kline(symbol, start, end, adjust)
+    if not records:
+        return []
+    df = pd.DataFrame([r.model_dump() for r in records])
+    if specs:
+        df = compute_many(df, specs)
+    df = df.replace({np.nan: None})
+    return df.to_dict(orient="records")
