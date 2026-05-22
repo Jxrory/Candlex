@@ -44,6 +44,58 @@ description: 使用场景：需要获取中国A股市场数据时——包括K�
 ]
 ```
 
+### K线 + 技术指标
+
+`GET /indicators/{symbol}`
+
+日K线 + 实时计算的技术指标，支持复权和动态指定指标组合。
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-------|------|--------|------|
+| `start` | `YYYY-MM-DD` | 1年前 | 开始日期 |
+| `end` | `YYYY-MM-DD` | 今天 | 结束日期 |
+| `adjust` | `"qfq"` 或 `"hfq"` | 无 | 前复权或后复权，作用于K线数据 |
+| `i` | 可重复 | 无 | 指标规格，详见下表 |
+
+`i` 参数支持两种格式：
+- 简写：`i=ma:5&i=ma:10&i=macd&i=rsi:14`
+- JSON：`i=[{"name":"ma","params":{"n":5}}]`
+
+支持 7 种指标及其默认参数：
+
+| 名称 | 默认参数 | 简写示例 | 输出字段 |
+|------|---------|----------|---------|
+| `ma` | `n=20` | `ma:5` | `ma{n}` |
+| `ema` | `n=20` | `ema:12` | `ema{n}` |
+| `macd` | `fast=12,slow=26,signal=9` | `macd` | `macd_dif`, `macd_dea`, `macd_hist` |
+| `rsi` | `n=14` | `rsi:14` | `rsi{n}` |
+| `boll` | `n=20,k=2` | `boll:20,2` | `boll_mid`, `boll_upper`, `boll_lower` |
+| `atr` | `n=14` | `atr:14` | `atr{n}` |
+| `kdj` | `n=9,m1=3,m2=3` | `kdj:9,3,3` | `kdj_k`, `kdj_d`, `kdj_j` |
+
+返回原始K线字段（date/open/high/low/close/volume/amount）+ 请求的指标列：
+
+```json
+[
+  {
+    "date": "2026-01-05",
+    "open": 15.32,
+    "high": 15.68,
+    "low": 15.18,
+    "close": 15.55,
+    "volume": 12567800,
+    "amount": 1.956e8,
+    "ma5": 15.42,
+    "ma10": 15.28,
+    "macd_dif": 0.15,
+    "macd_dea": 0.12,
+    "macd_hist": 0.03
+  }
+]
+```
+
+指标值在服务端使用 pandas/numpy 实时计算，不缓存。NaN 序列化为 `null`。
+
 ### 分红与公司事件
 
 `GET /dividend/{symbol}`
@@ -184,8 +236,14 @@ kline = requests.get(
     params={"start": "2025-01-01", "end": "2025-12-31", "adjust": "qfq"},
 ).json()
 
+# 获取K线 + 技术指标（MA5, MA10, MACD）
+kline_with_indicators = requests.get(
+    f"{BASE}/indicators/SH.600519",
+    params={"start": "2025-01-01", "end": "2025-12-31", "i": ["ma:5", "ma:10", "macd"]},
+).json()
+
 # 获取财务指标，强制刷新
-indicators = requests.get(
+financial = requests.get(
     f"{BASE}/indicator/SH.600519",
     params={"refresh": "true"},
 ).json()
@@ -199,7 +257,7 @@ calendar = requests.get(
 
 ## 使用场景
 
-1. **K线技术分析** → `GET /kline/{symbol}`，可按需使用 `adjust` 参数复权
+1. **K线技术分析** → `GET /kline/{symbol}` 获取纯K线数据，`GET /indicators/{symbol}` 获取K线+技术指标（MA/MACD/RSI/BOLL/KDJ等）
 2. **基本面分析** → 组合使用 `GET /indicator/{symbol}` + `GET /balance/{symbol}` + `GET /profit/{symbol}` + `GET /cash-flow/{symbol}`
 3. **事件驱动研究** → `GET /dividend/{symbol}` 查看分红送配历史
 5. **情绪面参考** → `GET /news/{symbol}` 获取近期新闻报道
@@ -211,4 +269,5 @@ calendar = requests.get(
 - 需要中国A股数据进行分析时使用本技能
 - 此处列出的所有路由为 CandleX 的全部功能，不涉及组合管理、交易或用户认证
 - 股票代码格式严格：`SH.600519`、`SZ.000001`、`BJ.430047`，不接受裸代码
-- 复权参数（`qfq`/`hfq`）仅适用于 `/kline/{symbol}`
+- 复权参数（`qfq`/`hfq`）适用于 `/kline/{symbol}` 和 `/indicators/{symbol}`
+- 历技术指标通过 `i` 参数指定（可重复），支持简写 `ma:5` 和 JSON 两种格式
