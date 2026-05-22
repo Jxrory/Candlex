@@ -70,7 +70,11 @@ async def indicators(
 
     logger.info("GET /indicators/%s start=%s end=%s adjust=%s i=%s", symbol, start, end, adjust, i)
     from app.indicators_service import get_indicators, parse_specs
-    specs = parse_specs(i)
+    try:
+        specs = parse_specs(i)
+    except ValueError as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail=str(e))
     result = await get_indicators(symbol, start, end, adjust, specs)
     logger.info("GET /indicators/%s returned %d records", symbol, len(result))
     return result
