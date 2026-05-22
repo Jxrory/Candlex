@@ -31,15 +31,18 @@ def parse_specs(raw: list[str]) -> list[IndicatorSpec]:
         if val.startswith("["):
             parsed = json.loads(val)
             for item in parsed:
-                name = item["name"].lower()
+                name = item.get("name")
+                if not name or not isinstance(name, str):
+                    raise ValueError(f"invalid indicator spec: missing or invalid 'name' field in {item}")
+                name = name.lower()
                 if name not in SUPPORTED:
-                    raise ValueError(f"unsupported indicator: {name}")
+                    raise ValueError(f"unsupported indicator: {name}, supported: {SUPPORTED}")
                 specs.append(IndicatorSpec(name, item.get("params")))
         else:
             parts = val.split(":")
             name = parts[0].lower()
             if name not in SUPPORTED:
-                raise ValueError(f"unsupported indicator: {name}")
+                raise ValueError(f"unsupported indicator: {name}, supported: {SUPPORTED}")
             params = None
             if len(parts) > 1 and parts[1]:
                 raw_params = parts[1].split(",")

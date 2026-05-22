@@ -208,6 +208,10 @@ def compute_indicator(df: pd.DataFrame, spec: IndicatorSpec) -> pd.DataFrame:
         slow = int(params.get("slow", 26))
         signal = int(params.get("signal", 9))
         macd_df = macd(df["close"], fast=fast, slow=slow, signal=signal)
+        macd_df = macd_df.rename(columns={
+            "dif": "macd_dif",
+            "dea": "macd_dea",
+        })
         for c in macd_df.columns:
             out[c] = macd_df[c]
         return out

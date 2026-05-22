@@ -1,6 +1,6 @@
 import logging
 from datetime import date, datetime, timedelta
-from fastapi import APIRouter, Query, Path
+from fastapi import APIRouter, HTTPException, Query, Path
 
 from app.calendar import calendar_service
 from app.dividend import dividend_service
@@ -16,6 +16,7 @@ from app.financial_indicator import financial_indicator_service
 from app.balance_sheet import balance_sheet_service
 from app.profit_sheet import profit_sheet_service
 from app.cash_flow_sheet import cash_flow_sheet_service
+from app.indicators_service import get_indicators, parse_specs
 from app.news import news_service
 
 logger = logging.getLogger(__name__)
@@ -69,11 +70,9 @@ async def indicators(
         start = today - timedelta(days=365)
 
     logger.info("GET /indicators/%s start=%s end=%s adjust=%s i=%s", symbol, start, end, adjust, i)
-    from app.indicators_service import get_indicators, parse_specs
     try:
         specs = parse_specs(i)
     except ValueError as e:
-        from fastapi import HTTPException
         raise HTTPException(status_code=422, detail=str(e))
     result = await get_indicators(symbol, start, end, adjust, specs)
     logger.info("GET /indicators/%s returned %d records", symbol, len(result))
