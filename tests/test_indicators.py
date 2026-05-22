@@ -1,4 +1,3 @@
-from datetime import date
 import pytest
 from app.tools.indicators import IndicatorSpec
 
@@ -52,3 +51,26 @@ def test_parse_unknown_indicator_json():
     from app.indicators_service import parse_specs
     with pytest.raises(ValueError, match="unsupported indicator"):
         parse_specs(['[{"name":"INVALID","params":{}}]'])
+
+
+def test_parse_dedup_identical_shorthand():
+    from app.indicators_service import parse_specs
+    result = parse_specs(["ma:5", "ma:5"])
+    assert len(result) == 1
+    assert result == [IndicatorSpec("ma", {"n": 5})]
+
+
+def test_parse_dedup_shorthand_and_json():
+    from app.indicators_service import parse_specs
+    result = parse_specs(["ma:5", '[{"name":"ma","params":{"n":5}}]'])
+    assert len(result) == 1
+    assert result == [IndicatorSpec("ma", {"n": 5})]
+
+
+def test_parse_json_multi_entry():
+    from app.indicators_service import parse_specs
+    result = parse_specs(['[{"name":"ma","params":{"n":5}},{"name":"rsi","params":{"n":14}}]'])
+    assert result == [
+        IndicatorSpec("ma", {"n": 5}),
+        IndicatorSpec("rsi", {"n": 14}),
+    ]

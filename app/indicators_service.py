@@ -1,13 +1,7 @@
 import json
 import logging
-from datetime import date
-from typing import Any
 
-import numpy as np
-import pandas as pd
-
-from app.service import get_kline
-from app.tools.indicators import IndicatorSpec, SUPPORTED, compute_many
+from app.tools.indicators import IndicatorSpec, SUPPORTED
 
 logger = logging.getLogger(__name__)
 
