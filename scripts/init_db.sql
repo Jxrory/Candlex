@@ -113,3 +113,14 @@ CREATE TABLE IF NOT EXISTS news (
     updated_at   TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (symbol, url)
 );
+
+CREATE TABLE IF NOT EXISTS spot_snapshots (
+    symbol         TEXT NOT NULL,
+    snapshot_time  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    data           JSONB NOT NULL,
+    source         TEXT NOT NULL,
+    PRIMARY KEY (symbol, snapshot_time)
+);
+
+SELECT create_hypertable('spot_snapshots', 'snapshot_time', if_not_exists => TRUE);
+CREATE INDEX IF NOT EXISTS idx_spot_snapshots_symbol_time ON spot_snapshots (symbol, snapshot_time DESC);
