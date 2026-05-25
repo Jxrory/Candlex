@@ -59,3 +59,119 @@ def test_spot_source_filter_symbol_empty():
     source = SpotSource()
     df = source.filter_symbol(pd.DataFrame({"代码": ["000001"]}), "SH.600519")
     assert len(df) == 0
+
+
+# ── SpotService tests ──────────────────────────────────────────
+
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+import json
+import pytest
+
+
+class FakePool:
+    """In-memory mock for asyncpg Pool used in post-market tests."""
+
+    def __init__(self):
+        self.rows = []
+
+    def acquire(self):
+        return _FakeAcquire(self)
+
+
+class _FakeAcquire:
+    def __init__(self, pool):
+        self.pool = pool
+
+    async def __aenter__(self):
+        return _FakeConn(self.pool)
+
+    async def __aexit__(self, *args):
+        pass
+
+
+class _FakeConn:
+    def __init__(self, pool):
+        self.pool = pool
+
+    async def fetch(self, query, *params):
+        return self.pool.rows
+
+    async def fetchrow(self, query, *params):
+        rows = [r for r in self.pool.rows if r.get("symbol") == params[0]] if params else self.pool.rows
+        return rows[0] if rows else None
+
+    async def executemany(self, query, rows):
+        self.pool.rows = rows
+        return len(rows)
+
+
+@pytest.mark.asyncio
+async def test_spot_service_fetch_real_all(mock_akshare):
+    from app.spot import SpotService
+    service = SpotService()
+    with patch("akshare.stock_zh_a_spot_em", return_value=mock_akshare):
+        result = await service.fetch_real()
+    assert len(result) == 2
+    assert result[0]["代码"] == "600519"
+
+
+@pytest.mark.asyncio
+async def test_spot_service_fetch_real_symbol(mock_akshare):
+    from app.spot import SpotService
+    service = SpotService()
+    with patch("akshare.stock_zh_a_spot_em", return_value=mock_akshare):
+        result = await service.fetch_real("SH.600519")
+    assert len(result) == 1
+    assert result[0]["代码"] == "600519"
+
+
+@pytest.mark.asyncio
+async def test_spot_service_get_latest_all():
+    from app.spot import SpotService
+    service = SpotService()
+    pool = FakePool()
+    pool.rows = [
+        {"symbol": "SH.600519", "data": json.dumps({"代码": "600519", "最新价": 1800.0, "名称": "贵州茅台"})},
+        {"symbol": "SZ.000001", "data": json.dumps({"代码": "000001", "最新价": 12.5, "名称": "平安银行"})},
+    ]
+    result = await service.get_latest(pool)
+    assert len(result) == 2
+    assert result[0]["symbol"] == "SH.600519"
+
+
+@pytest.mark.asyncio
+async def test_spot_service_get_latest_symbol():
+    from app.spot import SpotService
+    service = SpotService()
+    pool = FakePool()
+    pool.rows = [
+        {"symbol": "SH.600519", "data": json.dumps({"代码": "600519", "最新价": 1800.0})},
+    ]
+    result = await service.get_latest(pool, "SH.600519")
+    assert len(result) == 1
+    assert result[0]["代码"] == "600519"
+
+
+@pytest.mark.asyncio
+async def test_spot_service_get_latest_no_data():
+    from app.spot import SpotService
+    service = SpotService()
+    pool = FakePool()
+    pool.rows = []
+    result = await service.get_latest(pool)
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_spot_service_sync_all(mock_akshare):
+    from app.spot import SpotService
+    service = SpotService()
+    pool = FakePool()
+    with patch("akshare.stock_zh_a_spot_em", return_value=mock_akshare):
+        with patch("app.spot.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 5, 25, 17, 0, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+            count = await service.sync_all(pool)
+    assert count == 2
+    assert len(pool.rows) == 2
+    assert pool.rows[0][0] == "SH.600519"  # symbol
