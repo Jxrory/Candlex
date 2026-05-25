@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from app.calendar import calendar_service
 from app.dividend import dividend_service
 from app.stock_list import stock_list_service
+from app.spot import spot_service
 from app.database import get_pool, close_pool
 from app.ak_trace import _log_writer
 from app.router import router
@@ -54,6 +55,16 @@ async def sync_stock_list():
         logger.error("scheduled task: stock list sync failed: %s", e)
 
 
+async def sync_spot_snapshot():
+    logger.info("scheduled task: sync spot snapshot")
+    pool = await get_pool()
+    try:
+        count = await spot_service.sync_all(pool)
+        logger.info("scheduled task: synced %d spot records", count)
+    except Exception as e:
+        logger.error("scheduled task: spot sync failed: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("CandleX starting up")
@@ -83,8 +94,17 @@ async def lifespan(app: FastAPI):
         id="sync_stock_list",
         replace_existing=True,
     )
+    scheduler.add_job(
+        sync_spot_snapshot,
+        trigger="cron",
+        hour=17, minute=0,
+        id="sync_spot_snapshot",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info("scheduler started, stock list sync at 08:30 on day 15")
+
+    asyncio.create_task(sync_spot_snapshot())
 
     yield
     if _writer_task is not None:
