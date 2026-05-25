@@ -280,3 +280,16 @@ async def spot_symbol(
     records = await spot_service.get_latest(pool, symbol)
     logger.info("GET /quote/spot/%s returned %d records", symbol, len(records))
     return records
+
+
+@router.get("/quote/spot/sync")
+async def spot_sync():
+    logger.info("GET /quote/spot/sync")
+    pool = await get_pool()
+    try:
+        count = await spot_service.sync_all(pool)
+        logger.info("GET /quote/spot/sync completed: %d records", count)
+        return {"synced": count}
+    except Exception as e:
+        logger.error("GET /quote/spot/sync failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
