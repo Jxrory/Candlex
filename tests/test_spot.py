@@ -175,3 +175,59 @@ async def test_spot_service_sync_all(mock_akshare):
     assert count == 2
     assert len(pool.rows) == 2
     assert pool.rows[0][0] == "SH.600519"  # symbol
+
+
+# ── Route tests ─────────────────────────────────────────────
+
+from unittest.mock import patch
+from fastapi.testclient import TestClient
+from app.main import app
+
+client = TestClient(app)
+
+
+def test_spot_real_route_all():
+    with patch("app.spot.spot_service.fetch_real", return_value=[{"代码": "600519", "最新价": 1800.0}]):
+        resp = client.get("/quote/spot/real")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["代码"] == "600519"
+
+
+def test_spot_real_route_codes_filter():
+    records = [
+        {"代码": "600519", "最新价": 1800.0},
+        {"代码": "000001", "最新价": 12.5},
+    ]
+    with patch("app.spot.spot_service.fetch_real", return_value=records):
+        resp = client.get("/quote/spot/real?codes=600519")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["代码"] == "600519"
+
+
+def test_spot_real_route_symbol():
+    with patch("app.spot.spot_service.fetch_real", return_value=[{"代码": "600519", "最新价": 1800.0}]):
+        resp = client.get("/quote/spot/real/SH.600519")
+    assert resp.status_code == 200
+
+
+def test_spot_real_route_invalid_symbol():
+    resp = client.get("/quote/spot/real/INVALID")
+    assert resp.status_code == 422
+
+
+def test_spot_route_all():
+    with patch("app.spot.spot_service.get_latest", return_value=[{"代码": "600519", "最新价": 1800.0}]):
+        resp = client.get("/quote/spot")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+
+
+def test_spot_route_symbol():
+    with patch("app.spot.spot_service.get_latest", return_value=[{"代码": "600519", "最新价": 1800.0}]):
+        resp = client.get("/quote/spot/SH.600519")
+    assert resp.status_code == 200

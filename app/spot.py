@@ -159,3 +159,6 @@ def _match_market(code: str, prefix: str) -> bool:
     elif prefix == "BJ":
         return code.startswith(("4", "8"))
     return False
+
+
+spot_service = SpotService()
