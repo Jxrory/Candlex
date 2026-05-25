@@ -282,7 +282,7 @@ async def spot_symbol(
     return records
 
 
-@router.get("/quote/spot/sync")
+@router.get("/quote/sync", response_model=dict)
 async def spot_sync():
     logger.info("GET /quote/spot/sync")
     pool = await get_pool()

@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 @pytest.fixture
 def mock_akshare():
     data = {
-        "代码": ["600519", "000001"],
+        "代码": ["sh600519", "sz000001"],
         "名称": ["贵州茅台", "平安银行"],
         "最新价": [1800.0, 12.5],
         "涨跌幅": [1.5, -0.3],
@@ -24,7 +24,7 @@ def mock_akshare():
 def test_spot_source_name():
     from app.sources.spot import SpotSource
     source = SpotSource()
-    assert source.name == "eastmoney_spot"
+    assert source.name == "sina_spot"
 
 
 def test_spot_source_to_raw_code():
@@ -39,10 +39,10 @@ def test_spot_source_to_raw_code():
 async def test_spot_source_fetch_all(mock_akshare):
     from app.sources.spot import SpotSource
     source = SpotSource()
-    with patch("akshare.stock_zh_a_spot_em", return_value=mock_akshare):
+    with patch("akshare.stock_zh_a_spot", return_value=mock_akshare):
         df = await source.fetch_all()
         assert len(df) == 2
-        assert list(df["代码"]) == ["600519", "000001"]
+        assert list(df["代码"]) == ["sh600519", "sz000001"]
 
 
 @pytest.mark.asyncio
@@ -51,7 +51,7 @@ async def test_spot_source_filter_symbol(mock_akshare):
     source = SpotSource()
     filtered = source.filter_symbol(mock_akshare, "SH.600519")
     assert len(filtered) == 1
-    assert filtered.iloc[0]["代码"] == "600519"
+    assert filtered.iloc[0]["代码"] == "sh600519"
 
 
 def test_spot_source_filter_symbol_empty():
@@ -110,20 +110,20 @@ class _FakeConn:
 async def test_spot_service_fetch_real_all(mock_akshare):
     from app.spot import SpotService
     service = SpotService()
-    with patch("akshare.stock_zh_a_spot_em", return_value=mock_akshare):
+    with patch("akshare.stock_zh_a_spot", return_value=mock_akshare):
         result = await service.fetch_real()
     assert len(result) == 2
-    assert result[0]["代码"] == "600519"
+    assert result[0]["代码"] == "sh600519"
 
 
 @pytest.mark.asyncio
 async def test_spot_service_fetch_real_symbol(mock_akshare):
     from app.spot import SpotService
     service = SpotService()
-    with patch("akshare.stock_zh_a_spot_em", return_value=mock_akshare):
+    with patch("akshare.stock_zh_a_spot", return_value=mock_akshare):
         result = await service.fetch_real("SH.600519")
     assert len(result) == 1
-    assert result[0]["代码"] == "600519"
+    assert result[0]["代码"] == "sh600519"
 
 
 @pytest.mark.asyncio
@@ -168,7 +168,7 @@ async def test_spot_service_sync_all(mock_akshare):
     from app.spot import SpotService
     service = SpotService()
     pool = FakePool()
-    with patch("akshare.stock_zh_a_spot_em", return_value=mock_akshare):
+    with patch("akshare.stock_zh_a_spot", return_value=mock_akshare):
         with patch("app.spot.datetime") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 5, 25, 17, 0, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
             count = await service.sync_all(pool)

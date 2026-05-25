@@ -82,11 +82,7 @@ class SpotService:
         for _, row in df.iterrows():
             data = _clean_spot_row(row)
             code = str(row.get(self._code_col, ""))
-            symbol = None
-            for prefix in ("SH", "SZ", "BJ"):
-                if _match_market(code, prefix):
-                    symbol = f"{prefix}.{code}"
-                    break
+            symbol = _parse_sina_symbol(code)
             if not symbol:
                 continue
 
@@ -151,14 +147,14 @@ def _safe_float(val: object) -> float | None:
         return None
 
 
-def _match_market(code: str, prefix: str) -> bool:
-    if prefix == "SH":
-        return code.startswith("6")
-    elif prefix == "SZ":
-        return code.startswith(("0", "3"))
-    elif prefix == "BJ":
-        return code.startswith(("4", "8"))
-    return False
+def _parse_sina_symbol(code: str) -> str | None:
+    market_map = {"sh": "SH", "sz": "SZ", "bj": "BJ"}
+    if len(code) >= 8:
+        prefix = code[:2].lower()
+        bare = code[2:]
+        if prefix in market_map and bare.isdigit() and len(bare) == 6:
+            return f"{market_map[prefix]}.{bare}"
+    return None
 
 
 spot_service = SpotService()

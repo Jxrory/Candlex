@@ -104,8 +104,6 @@ async def lifespan(app: FastAPI):
     scheduler.start()
     logger.info("scheduler started, stock list sync at 08:30 on day 15")
 
-    asyncio.create_task(sync_spot_snapshot())
-
     yield
     if _writer_task is not None:
         _writer_task.cancel()
