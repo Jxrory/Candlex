@@ -12,6 +12,11 @@ import logging
 import sys
 from pathlib import Path
 
+# Ensure project root is on sys.path for direct invocation
+_project_root = str(Path(__file__).resolve().parent.parent)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 import asyncpg
 import pandas as pd
 from mootdx.financial import financial
@@ -111,29 +116,29 @@ async def ingest(
     inserted = 0
     skip_reason: dict[str, int] = {"bad_code": 0, "no_data": 0}
 
-    for code, row in df.iterrows():
-        symbol = _code_to_symbol(code)
-        if symbol is None:
-            skip_reason["bad_code"] += 1
-            continue
+    async with pool.acquire() as conn:
+        for code, row in df.iterrows():
+            symbol = _code_to_symbol(code)
+            if symbol is None:
+                skip_reason["bad_code"] += 1
+                continue
 
-        rd_raw = row.get("report_date")
-        if rd_raw is None:
-            skip_reason["no_data"] += 1
-            continue
-        rd = pd.to_datetime(str(int(rd_raw)), format="%Y%m%d").date()
+            rd_raw = row.get("report_date")
+            if rd_raw is None or pd.isna(rd_raw):
+                skip_reason["no_data"] += 1
+                continue
+            rd = pd.to_datetime(str(int(rd_raw)), format="%Y%m%d").date()
 
-        table_dicts = _split_row(row)
-        if not table_dicts:
-            skip_reason["no_data"] += 1
-            continue
+            table_dicts = _split_row(row)
+            if not table_dicts:
+                skip_reason["no_data"] += 1
+                continue
 
-        async with pool.acquire() as conn:
             for table_name, data in table_dicts.items():
                 await _upsert_table(conn, table_name, symbol, rd, data)
                 total_by_table[table_name] = total_by_table.get(table_name, 0) + 1
 
-        inserted += 1
+            inserted += 1
 
     logger.info("inserted %d stocks", inserted)
     for table_name, count in sorted(total_by_table.items()):
@@ -162,8 +167,8 @@ async def main():
 
     pool = await asyncpg.create_pool(
         dsn=settings.db_dsn,
-        min_size=1,
-        max_size=5,
+        min_size=settings.db_min_connections,
+        max_size=settings.db_max_connections,
     )
     try:
         await ingest(pool, file_path)
