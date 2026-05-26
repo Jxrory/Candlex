@@ -10,11 +10,6 @@ logger = logging.getLogger(__name__)
 
 FINANCIAL_TABLES = sorted(TABLE_COLUMNS.keys())
 
-ALL_ENGLISH_COLS: dict[str, str] = {}
-for table_name, cols in TABLE_COLUMNS.items():
-    for col in cols:
-        ALL_ENGLISH_COLS[col.english_name] = table_name
-
 
 async def get_financial_data(
     pool: asyncpg.Pool,
@@ -143,10 +138,21 @@ async def query_financial(
 
 
 class FinancialV2Service:
-    async def get_financial_data(self, pool, symbol, start=None, end=None):
+    async def get_financial_data(
+        self,
+        pool: asyncpg.Pool,
+        symbol: str,
+        start: date | None = None,
+        end: date | None = None,
+    ) -> list[dict]:
         return await get_financial_data(pool, symbol, start, end)
 
-    async def query_financial(self, pool, filters, report_date=None):
+    async def query_financial(
+        self,
+        pool: asyncpg.Pool,
+        filters: dict[str, tuple[float | None, float | None]],
+        report_date: date | None = None,
+    ) -> list[dict]:
         return await query_financial(pool, filters, report_date)
 
 
