@@ -1,6 +1,6 @@
 ---
 name: candlex-service
-description: 使用场景：需要获取中国A股市场数据时——包括K线OHLCV、交易日历、分红/公司事件、财务报表（资产负债表/利润表/现金流量表）、财务指标、股票列表、个股新闻。基于akshare多源故障转移的缓存优先只读API。
+description: 使用场景：需要获取中国A股市场数据时——包括K线OHLCV、交易日历、分红/公司事件、基本面数据（v2，合并6张财务表）、选股筛选（v2，ROE/负债率/EPS等指标组合筛选）、个股新闻。基于akshare多源故障转移的缓存优先只读API。
 ---
 
 # CandleX — 中国A股数据服务
@@ -123,79 +123,54 @@ description: 使用场景：需要获取中国A股市场数据时——包括K�
 ]
 ```
 
-### 财务指标
+### 基本面数据（v2，推荐）
 
-`GET /indicator/{symbol}`
+`GET /v2/financial/{symbol}`
 
-ROE、EPS等关键财务比率指标，按报告期提供。
+按报告期获取完整基本面数据（合并每股指标、资产负债表、利润表、现金流量表、财务指标、持仓等6张表）。数据源为离线TDX数据，无需 `refresh`。
 
 | 参数 | 类型 | 默认值 | 说明 |
 |-------|------|--------|------|
 | `start` | `YYYY-MM-DD` | 无 | 开始日期 |
 | `end` | `YYYY-MM-DD` | 无 | 结束日期 |
-| `refresh` | `bool` | `false` | 强制从akshare刷新 |
 
-返回格式：
+返回格式——扁平结构，所有字段与查询参数中的可选列对齐：
 ```json
 [
   {
     "symbol": "SH.600519",
     "report_date": "2025-09-30",
-    "data": { "roe": 15.2, "eps": 42.5, "bps": 185.3 }
+    "eps": 42.5,
+    "bps": 185.3,
+    "roe": 15.2,
+    "debt_ratio": 16.8,
+    "revenue": 1.23e10,
+    "total_assets": 2.5e9,
+    "total_liabilities": 4.2e8,
+    "op_cf": 8.5e8
   }
 ]
 ```
 
-### 资产负债表
+### 选股筛选（v2）
 
-`GET /balance/{symbol}`
+`GET /v2/financial/query`
 
-按报告期获取资产负债表。
-
-| 参数 | 类型 | 默认值 | 说明 |
-|-------|------|--------|------|
-| `start` | `YYYY-MM-DD` | 无 | 开始日期 |
-| `end` | `YYYY-MM-DD` | 无 | 结束日期 |
-| `refresh` | `bool` | `false` | 强制从akshare刷新 |
-
-返回格式：
-```json
-[
-  {
-    "symbol": "SH.600519",
-    "report_date": "2025-09-30",
-    "data": { "total_assets": 2.5e9, "total_liabilities": 4.2e8 }
-  }
-]
-```
-
-### 利润表（损益表）
-
-`GET /profit/{symbol}`
-
-按报告期获取利润表。
+跨股票筛选——基于财务指标组合（ROE、负债率、EPS等）筛选符合条件的股票，每个参数同时支持 `_min` 和 `_max`。
 
 | 参数 | 类型 | 默认值 | 说明 |
 |-------|------|--------|------|
-| `start` | `YYYY-MM-DD` | 无 | 开始日期 |
-| `end` | `YYYY-MM-DD` | 无 | 结束日期 |
-| `refresh` | `bool` | `false` | 强制从akshare刷新 |
+| `report_date` | `YYYY-MM-DD` | 无 | 筛选指定报告期 |
+| `roe_min` / `roe_max` | `float` | 无 | ROE范围（净资产收益率） |
+| `debt_ratio_min` / `debt_ratio_max` | `float` | 无 | 资产负债率范围 |
+| `eps_min` / `eps_max` | `float` | 无 | 基本每股收益范围 |
+| `revenue_growth_min` / `revenue_growth_max` | `float` | 无 | 营业收入增长率范围 |
+| `net_profit_growth_min` / `net_profit_growth_max` | `float` | 无 | 净利润增长率范围 |
+| `gross_margin_min` / `gross_margin_max` | `float` | 无 | 毛利率范围 |
+| `current_ratio_min` / `current_ratio_max` | `float` | 无 | 流动比率范围 |
+| `roa_min` / `roa_max` | `float` | 无 | ROA范围（总资产收益率） |
 
-返回格式：与 `/balance/{symbol}` 结构相同。
-
-### 现金流量表
-
-`GET /cash-flow/{symbol}`
-
-按报告期获取现金流量表。
-
-| 参数 | 类型 | 默认值 | 说明 |
-|-------|------|--------|------|
-| `start` | `YYYY-MM-DD` | 无 | 开始日期 |
-| `end` | `YYYY-MM-DD` | 无 | 结束日期 |
-| `refresh` | `bool` | `false` | 强制从akshare刷新 |
-
-返回格式：与 `/balance/{symbol}` 结构相同。
+返回格式与 `/v2/financial/{symbol}` 相同（扁平结构）。
 
 ### 个股新闻
 
@@ -242,10 +217,16 @@ kline_with_indicators = requests.get(
     params={"start": "2025-01-01", "end": "2025-12-31", "i": ["ma:5", "ma:10", "macd"]},
 ).json()
 
-# 获取财务指标，强制刷新
+# 获取基本面数据（v2，合并6张表）
 financial = requests.get(
-    f"{BASE}/indicator/SH.600519",
-    params={"refresh": "true"},
+    f"{BASE}/v2/financial/SH.600519",
+    params={"start": "2024-01-01", "end": "2025-12-31"},
+).json()
+
+# 选股筛选：ROE > 15% 且 负债率 < 50%
+screened = requests.get(
+    f"{BASE}/v2/financial/query",
+    params={"report_date": "2025-09-30", "roe_min": 15, "debt_ratio_max": 50},
 ).json()
 
 # 获取交易日历
@@ -258,11 +239,12 @@ calendar = requests.get(
 ## 使用场景
 
 1. **K线技术分析** → `GET /kline/{symbol}` 获取纯K线数据，`GET /indicators/{symbol}` 获取K线+技术指标（MA/MACD/RSI/BOLL/KDJ等）
-2. **基本面分析** → 组合使用 `GET /indicator/{symbol}` + `GET /balance/{symbol}` + `GET /profit/{symbol}` + `GET /cash-flow/{symbol}`
-3. **事件驱动研究** → `GET /dividend/{symbol}` 查看分红送配历史
+2. **基本面分析** → `GET /v2/financial/{symbol}` 一次性获取完整财务数据（合并6张表）
+3. **选股筛选** → `GET /v2/financial/query` 按ROE/负债率/EPS等指标组合筛选
+4. **事件驱动研究** → `GET /dividend/{symbol}` 查看分红送配历史
 5. **情绪面参考** → `GET /news/{symbol}` 获取近期新闻报道
 
-谨慎使用 `refresh=true`——数据会自动缓存到TimescaleDB并在首次访问时获取。仅在需要同一会话内最新数据时才传 `refresh`。
+谨慎使用 `refresh=true`——仅适用于 `/dividend/{symbol}` 和 `/news/{symbol}` 端点。v2 基本面数据为离线数据，无需刷新。
 
 ## 使用规则
 
