@@ -16,6 +16,11 @@ import zipfile
 from datetime import date
 from pathlib import Path
 
+# Ensure project root is on sys.path for direct invocation
+_project_root = str(Path(__file__).resolve().parent.parent)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 import pandas as pd
 from mootdx.financial import financial
 
@@ -46,17 +51,36 @@ def _code_to_symbol(code: object) -> str | None:
     return None
 
 
-def _safe_val(v: object) -> object:
-    """Convert a mootdx value for PG insertion. NaN->None, numpy->native."""
+def _safe_val(v: object, pg_type: str = "NUMERIC") -> object:
+    """Convert a mootdx value for PG insertion. NaN/None->None, numpy->native."""
     if v is None:
         return None
+    # pandas Series from duplicate column names — take first value
+    if hasattr(v, "iloc"):
+        v = v.iloc[0] if len(v) > 0 else None
+        if v is None or pd.isna(v):
+            return None
+    # numpy scalar → native Python
+    if hasattr(v, "item"):
+        try:
+            v = v.item()
+        except (ValueError, IndexError):
+            return None
+    # TEXT columns: always convert to string (YYMMDD codes come as float)
+    if pg_type.upper().startswith("TEXT"):
+        if isinstance(v, float):
+            if math.isnan(v) or math.isinf(v):
+                return None
+            return str(int(v)) if v == int(v) else str(v)
+        return str(v)
+    # NUMERIC columns
     if isinstance(v, float):
-        if pd.isna(v) or math.isinf(v):
+        if math.isnan(v) or math.isinf(v):
             return None
         return v
-    if hasattr(v, "item"):
-        return v.item()
-    return v
+    if isinstance(v, (int, str, bool)):
+        return v
+    return None if pd.isna(v) else v
 
 
 def _split_row(row: pd.Series) -> dict[str, dict[str, object]]:
@@ -70,7 +94,7 @@ def _split_row(row: pd.Series) -> dict[str, dict[str, object]]:
         table_data: dict[str, object] = {}
         for col_def in cols:
             if col_def.chinese_name in row.index:
-                v = _safe_val(row[col_def.chinese_name])
+                v = _safe_val(row[col_def.chinese_name], col_def.pg_type)
                 if v is not None:
                     table_data[col_def.english_name] = v
         if table_data:
@@ -131,8 +155,12 @@ async def ingest(
                 continue
 
             for table_name, data in table_dicts.items():
-                await _upsert_table(conn, table_name, symbol, rd, data)
-                total_by_table[table_name] = total_by_table.get(table_name, 0) + 1
+                try:
+                    await _upsert_table(conn, table_name, symbol, rd, data)
+                    total_by_table[table_name] = total_by_table.get(table_name, 0) + 1
+                except asyncpg.exceptions.DataError:
+                    logger.warning("skip %s %s for %s: data error", symbol, rd, table_name)
+                    continue
 
             inserted += 1
 

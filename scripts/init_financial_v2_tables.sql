@@ -384,7 +384,7 @@ CREATE TABLE IF NOT EXISTS financial_ratio (
     fixed_asset_ratio               NUMERIC(10,4),  -- 固定资产比率(ID=214)
     liab_structure_ratio            NUMERIC(10,4),  -- 负债结构比(ID=215, %)
     parent_equity_to_capital        NUMERIC(10,4),  -- 归母权益/全部投入资本(ID=216, %)
-    equity_to_interest_debt         NUMERIC(10,4),  -- 股东权益/带息债务(ID=217, %)
+    equity_to_interest_debt         NUMERIC(20,2),  -- 股东权益/带息债务(ID=217, %)
     tangible_asset_to_net_debt      NUMERIC(10,4),  -- 有形资产/净债务(ID=218, %)
 
     -- 【现金流量分析 CF Analysis (219-229)】
@@ -501,8 +501,8 @@ CREATE TABLE IF NOT EXISTS financial_holdings (
     national_team_shares            NUMERIC(20,2),  -- 国家队持股数量(ID=284, 万股)
 
     -- 【业绩预告/快报 Earnings Forecast (285-294, 313-315, 317-318)】
-    forecast_net_profit_lower       NUMERIC(10,4),  -- 业绩预告净利润下限(ID=317, 万元)
-    forecast_net_profit_upper       NUMERIC(10,4),  -- 业绩预告净利润上限(ID=318, 万元)
+    forecast_net_profit_lower       NUMERIC(20,2),  -- 业绩预告净利润下限(ID=317, 万元)
+    forecast_net_profit_upper       NUMERIC(20,2),  -- 业绩预告净利润上限(ID=318, 万元)
     forecast_profit_yoy_lower       NUMERIC(10,4),  -- 业绩预告净利润同比下限(ID=285, %)
     forecast_profit_yoy_upper       NUMERIC(10,4),  -- 业绩预告净利润同比上限(ID=286, %)
     fast_rep_parent_net_profit      NUMERIC(20,2),  -- 业绩快报归母净利润(ID=287)
