@@ -434,7 +434,7 @@ HOLDINGS_COLS: list[ColumnDef] = [
     ColumnDef("摊薄净资产收益率（业绩快报）", "fast_rep_diluted_roe", "NUMERIC(10,4)"),
     ColumnDef("加权净资产收益率（业绩快报）", "fast_rep_weighted_roe", "NUMERIC(10,4)"),
     ColumnDef("每股净资产（业绩快报）", "fast_rep_bps", "NUMERIC(10,4)"),
-    ColumnDef("业绩预告公告日期 ", "forecast_announce_date", "TEXT"),
+    ColumnDef("业绩预告公告日期", "forecast_announce_date", "TEXT"),
     ColumnDef("财报公告日期", "report_announce_date", "TEXT"),
     ColumnDef("业绩快报公告日期", "fast_rep_announce_date", "TEXT"),
     ColumnDef("员工总数(人)", "employee_count", "INTEGER"),
