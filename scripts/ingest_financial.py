@@ -8,16 +8,14 @@ Usage:
 
 import argparse
 import asyncio
+import asyncpg
 import logging
+import math
 import sys
+import zipfile
+from datetime import date
 from pathlib import Path
 
-# Ensure project root is on sys.path for direct invocation
-_project_root = str(Path(__file__).resolve().parent.parent)
-if _project_root not in sys.path:
-    sys.path.insert(0, _project_root)
-
-import asyncpg
 import pandas as pd
 from mootdx.financial import financial
 
@@ -53,9 +51,7 @@ def _safe_val(v: object) -> object:
     if v is None:
         return None
     if isinstance(v, float):
-        if pd.isna(v) or pd.isnull(v):
-            return None
-        if pd.isinf(v):
+        if pd.isna(v) or math.isinf(v):
             return None
         return v
     if hasattr(v, "item"):
