@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import date
 
@@ -26,8 +27,6 @@ async def get_financial_data(
 
     Returns list of flat dicts keyed by (symbol, report_date).
     """
-    import asyncio
-
     async def _fetch_table(table_name: str) -> list[dict]:
         query = f"SELECT * FROM {table_name} WHERE symbol = $1"
         params: list = [symbol]
@@ -79,25 +78,16 @@ async def query_financial(
     if not filters:
         return []
 
-    col_to_table: dict[str, str] = {}
-    for col_name in filters:
-        table_name = ENGLISH_TO_TABLE.get(col_name)
-        if table_name is None:
-            logger.warning("unknown column for filtering: %s", col_name)
-            continue
-        col_to_table[col_name] = table_name
-
-    if not col_to_table:
-        return []
-
     table_filters: dict[str, dict[str, tuple[float | None, float | None]]] = {}
     for col_name, (min_val, max_val) in filters.items():
         table_name = ENGLISH_TO_TABLE.get(col_name)
         if table_name is None:
+            logger.warning("unknown column for filtering: %s", col_name)
             continue
-        if table_name not in table_filters:
-            table_filters[table_name] = {}
-        table_filters[table_name][col_name] = (min_val, max_val)
+        table_filters.setdefault(table_name, {})[col_name] = (min_val, max_val)
+
+    if not table_filters:
+        return []
 
     primary_table = next(iter(table_filters))
     primary_filters = table_filters[primary_table]
@@ -134,8 +124,6 @@ async def query_financial(
     if not matching:
         return []
 
-    import asyncio
-
     async def _fetch_symbol_data(sym: str, rd: date) -> dict:
         merged: dict = {"symbol": sym, "report_date": rd}
         for tbl in FINANCIAL_TABLES:
@@ -154,9 +142,14 @@ async def query_financial(
     return results
 
 
-financial_v2_service = type("Service", (), {
-    "get_financial_data": get_financial_data,
-    "query_financial": query_financial,
-})()
+class FinancialV2Service:
+    async def get_financial_data(self, pool, symbol, start=None, end=None):
+        return await get_financial_data(pool, symbol, start, end)
+
+    async def query_financial(self, pool, filters, report_date=None):
+        return await query_financial(pool, filters, report_date)
+
+
+financial_v2_service = FinancialV2Service()
 
 __all__ = ["financial_v2_service", "get_financial_data", "query_financial"]
