@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import random
 from contextlib import asynccontextmanager
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -11,6 +12,7 @@ from app.stock_list import stock_list_service
 from app.spot import spot_service
 from app.database import get_pool, close_pool
 from app.ak_trace import _log_writer
+from app.kline_sync import kline_sync_service
 from app.router import router
 from app.config import settings
 
@@ -65,6 +67,24 @@ async def sync_spot_snapshot():
         logger.error("scheduled task: spot sync failed: %s", e)
 
 
+async def sync_kline():
+    logger.info("scheduled task: sync kline for pending stocks")
+    pool = await get_pool()
+    try:
+        count = await kline_sync_service.sync_all(pool)
+        logger.info("scheduled task: synced kline for %d stocks", count)
+    except Exception as e:
+        logger.error("scheduled task: kline sync failed: %s", e)
+
+    next_interval = random.randint(300, 780)
+    scheduler.reschedule_job(
+        "sync_kline",
+        trigger="interval",
+        seconds=next_interval,
+    )
+    logger.info("scheduled task: next kline sync in %d seconds", next_interval)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("CandleX starting up")
@@ -99,6 +119,13 @@ async def lifespan(app: FastAPI):
         trigger="cron",
         hour=17, minute=0,
         id="sync_spot_snapshot",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        sync_kline,
+        trigger="interval",
+        seconds=random.randint(300, 780),
+        id="sync_kline",
         replace_existing=True,
     )
     scheduler.start()
