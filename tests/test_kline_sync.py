@@ -18,14 +18,14 @@ def mock_pool():
 
 
 @pytest.mark.asyncio
-async def test_sync_all_success(mock_pool):
+async def test_sync_one_success(mock_pool):
     pool, conn = mock_pool
-    conn.fetch.return_value = [{"symbol": "SH.600519"}]
+    conn.fetchrow.return_value = {"symbol": "SH.600519"}
     conn.execute.return_value = "UPDATE 1"
 
     with patch("app.kline_sync.get_kline", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = []
-        result = await KlineSyncService().sync_all(pool)
+        result = await KlineSyncService().sync_one(pool)
 
     mock_get.assert_called_once_with("SH.600519", Y2000, YESTERDAY)
     conn.execute.assert_called_once_with(
@@ -36,54 +36,42 @@ async def test_sync_all_success(mock_pool):
 
 
 @pytest.mark.asyncio
-async def test_no_pending_stocks(mock_pool):
+async def test_sync_one_no_pending(mock_pool):
     pool, conn = mock_pool
-    conn.fetch.return_value = []
+    conn.fetchrow.return_value = None
 
     with patch("app.kline_sync.get_kline", new_callable=AsyncMock) as mock_get:
-        result = await KlineSyncService().sync_all(pool)
+        result = await KlineSyncService().sync_one(pool)
 
     mock_get.assert_not_called()
     assert result == 0
 
 
 @pytest.mark.asyncio
-async def test_failure_skips_and_continues(mock_pool):
+async def test_sync_one_failure(mock_pool):
     pool, conn = mock_pool
-    conn.fetch.return_value = [
-        {"symbol": "SH.600519"},
-        {"symbol": "SZ.000001"},
-    ]
+    conn.fetchrow.return_value = {"symbol": "SH.600519"}
     conn.execute.return_value = "UPDATE 1"
 
     with patch("app.kline_sync.get_kline", new_callable=AsyncMock) as mock_get:
-        mock_get.side_effect = [Exception("network error"), []]
-        result = await KlineSyncService().sync_all(pool)
+        mock_get.side_effect = Exception("network error")
+        result = await KlineSyncService().sync_one(pool)
 
-    assert mock_get.call_count == 2
-    conn.execute.assert_called_once_with(
-        "UPDATE stock_info SET list_status = 'SYNCED', list_date = NOW() WHERE symbol = $1",
-        "SZ.000001",
-    )
-    assert result == 1
+    mock_get.assert_called_once_with("SH.600519", Y2000, YESTERDAY)
+    conn.execute.assert_not_called()
+    assert result == 0
 
 
 @pytest.mark.asyncio
-async def test_only_sz_sh(mock_pool):
+async def test_sync_one_only_sz_sh(mock_pool):
     pool, conn = mock_pool
-    conn.fetch.return_value = [
-        {"symbol": "SH.600519"},
-        {"symbol": "SZ.000001"},
-        {"symbol": "SZ.300750"},
-    ]
-    conn.execute.return_value = "UPDATE 1"
+    conn.fetchrow.return_value = None
 
-    with patch("app.kline_sync.get_kline", new_callable=AsyncMock) as mock_get:
-        mock_get.return_value = []
-        await KlineSyncService().sync_all(pool)
+    await KlineSyncService().sync_one(pool)
 
-    conn.fetch.assert_called_once()
-    sql = conn.fetch.call_args[0][0]
+    conn.fetchrow.assert_called_once()
+    sql = conn.fetchrow.call_args[0][0]
     assert "LIKE 'SH.%'" in sql
     assert "LIKE 'SZ.%'" in sql
     assert "LIKE 'BJ.%'" not in sql
+    assert "LIMIT 1" in sql
