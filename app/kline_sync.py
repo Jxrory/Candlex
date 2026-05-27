@@ -12,7 +12,7 @@ Y2000 = date(2000, 1, 1)
 
 class KlineSyncService:
 
-    async def sync_one(self, pool: asyncpg.Pool) -> int:
+    async def sync_one(self, pool: asyncpg.Pool, source: str | None = None) -> int:
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT symbol FROM stock_info "
@@ -27,7 +27,7 @@ class KlineSyncService:
         symbol = row["symbol"]
         yesterday = date.today() - timedelta(days=1)
         try:
-            records = await get_kline(symbol, Y2000, yesterday)
+            records = await get_kline(symbol, Y2000, yesterday, source=source)
             async with pool.acquire() as conn:
                 await conn.execute(
                     "UPDATE stock_info SET list_status = 'SYNCED', list_date = NOW() WHERE symbol = $1",
