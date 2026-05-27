@@ -124,6 +124,7 @@ async def get_kline(
     start: date,
     end: date,
     adjust: str | None = None,
+    source: str | None = None,
 ) -> list[KlineRecord]:
     pool = await get_pool()
     today = date.today()
@@ -131,6 +132,12 @@ async def get_kline(
     await calendar_service.ensure_fresh()
     start = calendar_service.nearest_forward(start)
     end = calendar_service.nearest_backward(end)
+
+    effective_priority = list(settings.source_priority)
+    if source:
+        if source in effective_priority:
+            effective_priority.remove(source)
+        effective_priority.insert(0, source)
 
     cached = await query_cached(pool, symbol, start, end)
 
@@ -150,7 +157,7 @@ async def get_kline(
             fetch_from = min(fetch_from, start)
 
         if needs_fetch:
-            for source_name in settings.source_priority:
+            for source_name in effective_priority:
                 source = SOURCES.get(source_name)
                 if not source:
                     continue
@@ -165,7 +172,7 @@ async def get_kline(
 
             cached = await query_cached(pool, symbol, start, end)
     else:
-        for source_name in settings.source_priority:
+        for source_name in effective_priority:
             source = SOURCES.get(source_name)
             if not source:
                 continue
