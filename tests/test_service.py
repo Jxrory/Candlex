@@ -30,12 +30,12 @@ async def test_sina_source_format():
 async def test_tencent_source_format():
     from app.sources.tencent import TencentSource
     try:
-        df = await TencentSource().fetch("SZ000001", _default_start(), _default_end())
+        df = await TencentSource().fetch("SZ.000001", _default_start(), _default_end())
     except Exception as e:
         pytest.skip(f"tencent source unavailable: {e}")
 
     assert not df.empty
-    assert list(df.columns) == ["date", "open", "close", "high", "low", "amount"]
+    assert list(df.columns) == ["date", "open", "close", "high", "low", "amount", "volume"]
     assert df["volume"].isna().all()
     for col in ("open", "close", "high", "low", "amount"):
         assert df[col].dtype.kind == "f", f"{col} dtype={df[col].dtype}"
