@@ -71,7 +71,7 @@ async def sync_kline():
     logger.info("scheduled task: sync kline for pending stocks")
     pool = await get_pool()
     try:
-        count = await kline_sync_service.sync_all(pool)
+        count = await kline_sync_service.sync_one(pool)
         logger.info("scheduled task: synced kline for %d stocks", count)
     except Exception as e:
         logger.error("scheduled task: kline sync failed: %s", e)
