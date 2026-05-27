@@ -11,11 +11,15 @@ from app.database import get_pool
 from app.schemas import KlineRecord
 from app.sources.base import BaseSource
 from app.sources.sina import SinaSource
+from app.sources.tencent import TencentSource
+from app.sources.eastmoney import EastMoneySource
 
 logger = logging.getLogger(__name__)
 
 SOURCES: dict[str, BaseSource] = {
     "sina": SinaSource(),
+    "tencent": TencentSource(),
+    "eastmoney": EastMoneySource(),
 }
 
 
