@@ -27,7 +27,7 @@ async def test_sync_one_success(mock_pool):
         mock_get.return_value = []
         result = await KlineSyncService().sync_one(pool)
 
-    mock_get.assert_called_once_with("SH.600519", Y2000, YESTERDAY)
+    mock_get.assert_called_once_with("SH.600519", Y2000, YESTERDAY, source=None)
     conn.execute.assert_called_once_with(
         "UPDATE stock_info SET list_status = 'SYNCED', list_date = NOW() WHERE symbol = $1",
         "SH.600519",
@@ -57,9 +57,23 @@ async def test_sync_one_failure(mock_pool):
         mock_get.side_effect = Exception("network error")
         result = await KlineSyncService().sync_one(pool)
 
-    mock_get.assert_called_once_with("SH.600519", Y2000, YESTERDAY)
+    mock_get.assert_called_once_with("SH.600519", Y2000, YESTERDAY, source=None)
     conn.execute.assert_not_called()
     assert result == 0
+
+
+@pytest.mark.asyncio
+async def test_sync_one_with_source(mock_pool):
+    pool, conn = mock_pool
+    conn.fetchrow.return_value = {"symbol": "SH.600519"}
+    conn.execute.return_value = "UPDATE 1"
+
+    with patch("app.kline_sync.get_kline", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = []
+        result = await KlineSyncService().sync_one(pool, source="sina")
+
+    mock_get.assert_called_once_with("SH.600519", Y2000, YESTERDAY, source="sina")
+    assert result == 1
 
 
 @pytest.mark.asyncio

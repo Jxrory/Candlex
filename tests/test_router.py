@@ -93,3 +93,8 @@ def test_indicators_with_adjust():
     assert resp.status_code == 200
     data = resp.json()
     assert isinstance(data, list)
+
+
+def test_kline_with_source_param():
+    resp = client.get("/kline/SH.600519?start=2024-01-01&end=2024-01-03&source=tencent")
+    assert resp.status_code == 200
