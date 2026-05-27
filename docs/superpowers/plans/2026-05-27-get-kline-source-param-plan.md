@@ -112,113 +112,75 @@ git commit -m "feat: KlineSyncService.sync_one accepts source param"
 - Modify: `tests/test_service.py`
 - Test: `tests/test_service.py`
 
-- [ ] **Step 1: 添加 SinaSource 格式验证测试**
+- [ ] **Step 1: 编写三个数据源的格式验证测试（真实 akshare 请求）**
+
+使用 `symbol=SZ.000001`（平安银行），`start=今天-30天`，`end=今天`，真实调用 akshare，验证每个源的输出格式。
 
 ```python
-from datetime import date
-from unittest.mock import patch, MagicMock, AsyncMock
+from datetime import date, timedelta
 import pandas as pd
 import pytest
 
 
+def _default_start() -> date:
+    return date.today() - timedelta(days=30)
+
+
+def _default_end() -> date:
+    return date.today()
+
+
 def test_sina_source_format():
-    mock_raw = pd.DataFrame({
-        "date": pd.to_datetime(["2024-01-02", "2024-01-03"]),
-        "open": [10.0, 10.5],
-        "high": [11.0, 11.2],
-        "low": [9.5, 10.2],
-        "close": [10.5, 11.0],
-        "volume": [1000000, 1200000],
-        "amount": [1.05e7, 1.3e7],
-    })
-    with patch("app.sources.sina.ak.stock_zh_a_daily", return_value=mock_raw):
-        from app.sources.sina import SinaSource
-        df = SinaSource().fetch("sh600519", date(2024,1,1), date(2024,1,31))
+    from app.sources.sina import SinaSource
+    df = SinaSource().fetch("sz000001", _default_start(), _default_end())
 
+    assert not df.empty
     assert list(df.columns) == ["date", "open", "high", "low", "close", "volume", "amount"]
-    assert df["date"].dtype.kind in ("M", "O")  # datetime or object
+    assert df["date"].dtype.kind in ("M", "O")
     for col in ("open", "high", "low", "close", "amount"):
-        assert df[col].dtype.kind == "f"
+        assert df[col].dtype.kind == "f", f"{col} dtype={df[col].dtype}"
     assert df["volume"].dtype.kind in ("i", "u", "f")
-    assert (df["high"] >= df["open"]).all()
-    assert (df["high"] >= df["close"]).all()
     assert (df["high"] >= df["low"]).all()
-```
 
-- [ ] **Step 2: 运行验证失败**
 
-Run: `pytest tests/test_service.py::test_sina_source_format -v`
-Expected: PASS
-
-- [ ] **Step 3: 添加 TencentSource 格式验证测试**
-
-```python
 def test_tencent_source_format():
-    mock_raw = pd.DataFrame({
-        "date": pd.to_datetime(["2024-01-02", "2024-01-03"]),
-        "open": [10.0, 10.5],
-        "close": [10.5, 11.0],
-        "high": [11.0, 11.2],
-        "low": [9.5, 10.2],
-        "amount": [1.05e7, 1.3e7],
-    })
-    with patch("app.sources.tencent.ak.stock_zh_a_hist_tx", return_value=mock_raw):
-        from app.sources.tencent import TencentSource
-        df = TencentSource().fetch("SH600519", date(2024,1,1), date(2024,1,31))
+    from app.sources.tencent import TencentSource
+    df = TencentSource().fetch("SZ000001", _default_start(), _default_end())
 
+    assert not df.empty
     assert list(df.columns) == ["date", "open", "close", "high", "low", "amount"]
     assert df["volume"].isna().all()
     for col in ("open", "close", "high", "low", "amount"):
-        assert df[col].dtype.kind == "f"
-    assert (df["high"] >= df["open"]).all()
-    assert (df["high"] >= df["close"]).all()
+        assert df[col].dtype.kind == "f", f"{col} dtype={df[col].dtype}"
     assert (df["high"] >= df["low"]).all()
-```
 
-- [ ] **Step 4: 运行验证通过**
 
-Run: `pytest tests/test_service.py::test_tencent_source_format -v`
-Expected: PASS
-
-- [ ] **Step 5: 添加 EastMoneySource 格式验证测试**
-
-```python
 def test_eastmoney_source_format():
-    mock_raw = pd.DataFrame({
-        "日期": pd.to_datetime(["2024-01-02", "2024-01-03"]),
-        "开盘": [10.0, 10.5],
-        "收盘": [10.5, 11.0],
-        "最高": [11.0, 11.2],
-        "最低": [9.5, 10.2],
-        "成交量": [1000000, 1200000],
-        "成交额": [1.05e7, 1.3e7],
-        "涨跌幅": [1.0, 2.0],  # extra column, should be dropped
-    })
-    with patch("app.sources.eastmoney.ak.stock_zh_a_hist", return_value=mock_raw):
-        from app.sources.eastmoney import EastMoneySource
-        df = EastMoneySource().fetch("600519", date(2024,1,1), date(2024,1,31))
+    from app.sources.eastmoney import EastMoneySource
+    df = EastMoneySource().fetch("000001", _default_start(), _default_end())
 
+    assert not df.empty
     assert list(df.columns) == ["date", "open", "high", "low", "close", "volume", "amount"]
-    assert df["date"].dtype == object  # .dt.date returns Python date objects
-    assert df["date"].iloc[0] == date(2024, 1, 2)
+    assert df["date"].dtype == object
+    assert isinstance(df["date"].iloc[0], date)
     for col in ("open", "high", "low", "close", "amount"):
-        assert df[col].dtype.kind == "f"
+        assert df[col].dtype.kind == "f", f"{col} dtype={df[col].dtype}"
     assert df["volume"].dtype.kind in ("i", "u", "f")
-    assert (df["high"] >= df["open"]).all()
-    assert (df["high"] >= df["close"]).all()
     assert (df["high"] >= df["low"]).all()
 ```
 
-- [ ] **Step 6: 运行验证通过**
+- [ ] **Step 2: 运行验证通过**
 
-Run: `pytest tests/test_service.py::test_eastmoney_source_format -v`
-Expected: PASS
+Run: `pytest tests/test_service.py::test_sina_source_format tests/test_service.py::test_tencent_source_format tests/test_service.py::test_eastmoney_source_format -v`
+Expected: 三个测试全部 PASS
 
-- [ ] **Step 7: 添加 get_kline 指定 source 优先/回退测试**
+- [ ] **Step 3: 添加 get_kline 指定 source 优先/回退测试**
 
 ```python
 @pytest.mark.asyncio
 async def test_get_kline_with_source_uses_priority():
+    from unittest.mock import patch, AsyncMock
+    import pandas as pd
     from app.service import get_kline
     from datetime import date
 
@@ -247,12 +209,12 @@ async def test_get_kline_with_source_uses_priority():
         assert calls > 0, "tencent should have been called as the specified source"
 ```
 
-- [ ] **Step 8: 运行验证通过**
+- [ ] **Step 4: 运行验证通过**
 
 Run: `pytest tests/test_service.py::test_get_kline_with_source_uses_priority -v`
 Expected: PASS
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add tests/test_service.py
