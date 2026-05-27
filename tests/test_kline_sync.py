@@ -9,11 +9,17 @@ TODAY = date.today()
 YESTERDAY = TODAY - timedelta(days=1)
 
 
-@pytest.mark.asyncio
-async def test_sync_all_success():
+@pytest.fixture
+def mock_pool():
     pool = MagicMock()
     conn = AsyncMock()
     pool.acquire.return_value.__aenter__.return_value = conn
+    return pool, conn
+
+
+@pytest.mark.asyncio
+async def test_sync_all_success(mock_pool):
+    pool, conn = mock_pool
     conn.fetch.return_value = [{"symbol": "SH.600519"}]
     conn.execute.return_value = "UPDATE 1"
 
@@ -30,10 +36,8 @@ async def test_sync_all_success():
 
 
 @pytest.mark.asyncio
-async def test_no_pending_stocks():
-    pool = MagicMock()
-    conn = AsyncMock()
-    pool.acquire.return_value.__aenter__.return_value = conn
+async def test_no_pending_stocks(mock_pool):
+    pool, conn = mock_pool
     conn.fetch.return_value = []
 
     with patch("app.kline_sync.get_kline", new_callable=AsyncMock) as mock_get:
@@ -44,10 +48,8 @@ async def test_no_pending_stocks():
 
 
 @pytest.mark.asyncio
-async def test_failure_skips_and_continues():
-    pool = MagicMock()
-    conn = AsyncMock()
-    pool.acquire.return_value.__aenter__.return_value = conn
+async def test_failure_skips_and_continues(mock_pool):
+    pool, conn = mock_pool
     conn.fetch.return_value = [
         {"symbol": "SH.600519"},
         {"symbol": "SZ.000001"},
@@ -67,10 +69,8 @@ async def test_failure_skips_and_continues():
 
 
 @pytest.mark.asyncio
-async def test_only_sz_sh():
-    pool = MagicMock()
-    conn = AsyncMock()
-    pool.acquire.return_value.__aenter__.return_value = conn
+async def test_only_sz_sh(mock_pool):
+    pool, conn = mock_pool
     conn.fetch.return_value = [
         {"symbol": "SH.600519"},
         {"symbol": "SZ.000001"},
@@ -84,5 +84,6 @@ async def test_only_sz_sh():
 
     conn.fetch.assert_called_once()
     sql = conn.fetch.call_args[0][0]
-    assert "LIKE 'SH.%'" in sql or "LIKE 'SZ.%'" in sql
+    assert "LIKE 'SH.%'" in sql
+    assert "LIKE 'SZ.%'" in sql
     assert "LIKE 'BJ.%'" not in sql
