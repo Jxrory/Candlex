@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     cache_ttl_today_seconds: int = 60
     cache_ttl_recent_days: int = 5
     cache_ttl_recent_seconds: int = 300
-    source_priority: list[str] = ["sina", "tencent", "eastmoney"]
+    source_priority: list[str] = ["sina", "mootdx", "tencent"]
 
     dividend_sync_time: str = "08:30"
     dividend_sync_symbols: list[str] = []
