@@ -13,6 +13,7 @@ from app.sources.base import BaseSource
 from app.sources.sina import SinaSource
 from app.sources.tencent import TencentSource
 from app.sources.eastmoney import EastMoneySource
+from app.sources.mootdx import MootdxSource
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ SOURCES: dict[str, BaseSource] = {
     "sina": SinaSource(),
     "tencent": TencentSource(),
     "eastmoney": EastMoneySource(),
+    "mootdx": MootdxSource(),
 }
 
 
