@@ -18,7 +18,7 @@ class TencentSource(BaseSource):
     async def fetch(
         self, symbol: str, start_date: date, end_date: date
     ) -> pd.DataFrame:
-        tx_symbol = symbol.replace(".", "")
+        tx_symbol = symbol.replace(".", "").lower()
         start_str = start_date.strftime("%Y%m%d")
         end_str = end_date.strftime("%Y%m%d")
 
