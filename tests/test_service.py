@@ -60,6 +60,23 @@ async def test_eastmoney_source_format():
     assert (df["high"] >= df["low"]).all()
 
 
+@pytest.mark.asyncio
+async def test_mootdx_source_format():
+    from app.sources.mootdx import MootdxSource
+    try:
+        df = await MootdxSource().fetch("SH.600300", _default_start(), _default_end())
+    except Exception as e:
+        pytest.skip(f"mootdx source unavailable: {e}")
+
+    assert not df.empty
+    assert list(df.columns) == ["date", "open", "high", "low", "close", "volume", "amount"]
+    assert df["date"].dtype.kind in ("M", "O")
+    for col in ("open", "high", "low", "close", "amount"):
+        assert df[col].dtype.kind == "f", f"{col} dtype={df[col].dtype}"
+    assert df["volume"].dtype.kind in ("i", "u", "f")
+    assert (df["high"] >= df["low"]).all()
+
+
 def test_no_adjust_returns_raw(sample_records):
     from app.service import _apply_adjust
     result = _apply_adjust(sample_records, [], {}, "qfq")
