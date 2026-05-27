@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     dividend_sync_time: str = "08:30"
     dividend_sync_symbols: list[str] = []
+    kline_sync_interval: int = 540
 
     model_config: ClassVar[dict] = {"env_prefix": "CANDLEX_", "env_file": ".env"}
 
