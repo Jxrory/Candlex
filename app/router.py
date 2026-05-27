@@ -44,6 +44,7 @@ async def kline(
     start: date | None = Query(None),
     end: date | None = Query(None),
     adjust: str | None = Query(None, pattern="^(qfq|hfq)$"),
+    source: str | None = Query(None),
 ):
     today = date.today()
     if end is None:
@@ -51,8 +52,8 @@ async def kline(
     if start is None:
         start = today - timedelta(days=365)
 
-    logger.info("GET /kline/%s start=%s end=%s adjust=%s", symbol, start, end, adjust)
-    records = await get_kline(symbol, start, end, adjust)
+    logger.info("GET /kline/%s start=%s end=%s adjust=%s source=%s", symbol, start, end, adjust, source)
+    records = await get_kline(symbol, start, end, adjust, source=source)
     logger.info("GET /kline/%s returned %d records", symbol, len(records))
     return records
 
