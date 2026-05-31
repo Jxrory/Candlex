@@ -34,6 +34,23 @@ python scripts/ingest_financial.py --file=/path/to/gpcw20260331.zip
 python scripts/ingest_financial.py --all
 ```
 
+## import_kline.py
+
+将 `export_kline.py` 导出的 CSV 文件重新导入 `kline_data` 表。
+
+自动从文件名解析 symbol（`{symbol}-{start}-{end}.csv`），支持 `--dry-run` 预览。
+
+```bash
+# 导入全部 CSV
+python scripts/import_kline.py
+
+# 预览（只统计行数，不写入 DB）
+python scripts/import_kline.py --dry-run
+
+# 导入指定文件/通配符
+python scripts/import_kline.py data/kline-d/SH.6005*.csv
+```
+
 ## init_db.sql
 
 建表 DDL — 创建 TimescaleDB 超表：`kline_data`、`corporate_events`、`trade_calendar`、`api_request_log`。
