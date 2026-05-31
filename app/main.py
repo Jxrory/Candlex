@@ -93,18 +93,6 @@ async def lifespan(app: FastAPI):
     global _writer_task
     _writer_task = asyncio.create_task(_log_writer())
 
-    # hour, minute = settings.dividend_sync_time.split(":")
-    # scheduler.add_job(
-    #     sync_all_dividends,
-    #     trigger="cron",
-    #     hour=int(hour),
-    #     minute=int(minute),
-    #     id="sync_dividends",
-    #     replace_existing=True,
-    # )
-    # scheduler.start()
-    # logger.info("scheduler started, dividend sync at %s", settings.dividend_sync_time)
-
     scheduler.add_job(
         sync_stock_list,
         trigger="cron",
