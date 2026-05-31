@@ -1,11 +1,12 @@
 import json
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import asyncpg
 import pandas as pd
 
+from app.calendar import calendar_service
 from app.sources.spot import SpotSource
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,12 @@ class SpotService:
         return result
 
     async def sync_all(self, pool: asyncpg.Pool) -> int:
+        await calendar_service.ensure_fresh()
+        today = date.today()
+        if not calendar_service.is_trading_day(today):
+            logger.info("today %s is not a trading day, skipping spot sync", today)
+            return 0
+
         df = await self.source.fetch_all()
         snapshot_time = datetime.now(tz=ZoneInfo("Asia/Shanghai"))
 

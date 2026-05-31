@@ -84,6 +84,10 @@ class CalendarService:
             return d
         return self._dates[idx - 1] if idx > 0 else d
 
+    def is_trading_day(self, d: date) -> bool:
+        idx = bisect.bisect_left(self._dates, d)
+        return idx < len(self._dates) and self._dates[idx] == d
+
     def get_range(self, start: date, end: date) -> list[date]:
         lo = bisect.bisect_left(self._dates, start)
         hi = bisect.bisect_right(self._dates, end)
