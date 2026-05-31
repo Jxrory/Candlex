@@ -102,6 +102,13 @@ async def lifespan(app: FastAPI):
         id="sync_stock_list",
         replace_existing=True,
     )
+    scheduler.add_job(
+        sync_spot_snapshot,
+        trigger="cron",
+        hour=17, minute=0,
+        id="sync_spot_snapshot",
+        replace_existing=True,
+    )
     scheduler.start()
     logger.info("scheduler started, stock list sync at 08:30 on day 15")
 
