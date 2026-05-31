@@ -67,39 +67,22 @@ async def sync_spot_snapshot():
         logger.error("scheduled task: spot sync failed: %s", e)
 
 
-async def sync_kline_sz():
+async def sync_kline():
     logger.info("scheduled task: sync kline sz for pending stocks")
     pool = await get_pool()
     try:
-        count = await kline_sync_service.sync_one_sz(pool, source='sina')
+        count = await kline_sync_service.sync_one(pool, source='sina')
         logger.info("scheduled task: synced kline sz for %d stocks", count)
     except Exception as e:
         logger.error("scheduled task: kline sz sync failed: %s", e)
 
-    next_interval = random.randint(300, 780)
+    next_interval = random.randint(150, 300)
     scheduler.reschedule_job(
         "sync_kline_sz",
         trigger="interval",
         seconds=next_interval,
     )
     logger.info("scheduled task: next kline sz sync in %d seconds", next_interval)
-
-async def sync_kline_sh():
-    logger.info("scheduled task: sync kline sh for pending stocks")
-    pool = await get_pool()
-    try:
-        count = await kline_sync_service.sync_one_sh(pool, source='mootdx')
-        logger.info("scheduled task: synced kline sh for %d stocks", count)
-    except Exception as e:
-        logger.error("scheduled task: kline sync sh failed: %s", e)
-
-    next_interval = random.randint(300, 780)
-    scheduler.reschedule_job(
-        "sync_kline_sh",
-        trigger="interval",
-        seconds=next_interval,
-    )
-    logger.info("scheduled task: next kline sync sh in %d seconds", next_interval)
 
 
 @asynccontextmanager
@@ -129,27 +112,6 @@ async def lifespan(app: FastAPI):
         hour=8,
         minute=30,
         id="sync_stock_list",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        sync_spot_snapshot,
-        trigger="cron",
-        hour=17, minute=0,
-        id="sync_spot_snapshot",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        sync_kline_sz,
-        trigger="interval",
-        seconds=random.randint(300, 780),
-        id="sync_kline_sz",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        sync_kline_sh,
-        trigger="interval",
-        seconds=random.randint(300, 780),
-        id="sync_kline_sh",
         replace_existing=True,
     )
     scheduler.start()
