@@ -67,11 +67,13 @@ async def import_file(
         )
         return 0
 
+    dates = pd.to_datetime(df["date"])
+
     rows: list[tuple] = []
-    for _, row in df.iterrows():
+    for i, (_, row) in enumerate(df.iterrows()):
         rows.append((
             symbol,
-            row["date"],
+            dates[i].date(),
             row["open"],
             row["high"],
             row["low"],
