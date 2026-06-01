@@ -32,29 +32,6 @@ class StockInfoRecord(BaseModel):
     sector: str | None = None
 
 
-class FinancialIndicatorRecord(BaseModel):
-    symbol: str
-    report_date: date
-    data: dict
-
-
-class BalanceSheetRecord(BaseModel):
-    symbol: str
-    report_date: date
-    data: dict
-
-
-class ProfitSheetRecord(BaseModel):
-    symbol: str
-    report_date: date
-    data: dict
-
-
-class CashFlowSheetRecord(BaseModel):
-    symbol: str
-    report_date: date
-    data: dict
-
 
 class NewsRecord(BaseModel):
     symbol: str
