@@ -160,7 +160,7 @@ description: 使用场景：需要获取中国A股市场数据时——包括K�
 
 | 参数 | 类型 | 默认值 | 说明 |
 |-------|------|--------|------|
-| `report_date` | `YYYY-MM-DD` | 无 | 筛选指定报告期 |
+| `report_date_start` / `report_date_end` | `YYYY-MM-DD` | 最近4个报告期 | 筛选指定报告期范围，两者均不传时默认最近4个季度末；只传其一则开区间 |
 | `roe_min` / `roe_max` | `float` | 无 | ROE范围（净资产收益率） |
 | `debt_ratio_min` / `debt_ratio_max` | `float` | 无 | 资产负债率范围 |
 | `eps_min` / `eps_max` | `float` | 无 | 基本每股收益范围 |
@@ -170,7 +170,16 @@ description: 使用场景：需要获取中国A股市场数据时——包括K�
 | `current_ratio_min` / `current_ratio_max` | `float` | 无 | 流动比率范围 |
 | `roa_min` / `roa_max` | `float` | 无 | ROA范围（总资产收益率） |
 
-返回格式与 `/v2/financial/{symbol}` 相同（扁平结构）。
+返回格式为按 symbol 分组的 dict：
+```json
+{
+  "SH.600519": [
+    { "symbol": "SH.600519", "report_date": "2025-09-30", "roe": 15.2, ... },
+    { "symbol": "SH.600519", "report_date": "2025-12-31", "roe": 16.1, ... }
+  ],
+  "SZ.000001": [ ... ]
+}
+```
 
 ### 个股新闻
 

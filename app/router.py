@@ -299,7 +299,8 @@ async def spot_sync():
 
 @router.get("/v2/financial/query")
 async def financial_v2_query(
-    report_date: date | None = Query(None),
+    report_date_start: date | None = Query(None, alias="report_date_start"),
+    report_date_end: date | None = Query(None, alias="report_date_end"),
     roe_min: float | None = Query(None, alias="roe_min"),
     roe_max: float | None = Query(None, alias="roe_max"),
     debt_ratio_min: float | None = Query(None, alias="debt_ratio_min"),
@@ -318,8 +319,8 @@ async def financial_v2_query(
     roa_max: float | None = Query(None, alias="roa_max"),
 ):
     logger.info(
-        "GET /v2/financial/query report_date=%s roe_min=%s debt_ratio_min=%s",
-        report_date, roe_min, debt_ratio_min,
+        "GET /v2/financial/query report_date_start=%s report_date_end=%s roe_min=%s debt_ratio_min=%s",
+        report_date_start, report_date_end, roe_min, debt_ratio_min,
     )
     pool = await get_pool()
     filters: dict[str, tuple[float | None, float | None]] = {}
@@ -336,8 +337,10 @@ async def financial_v2_query(
     for name, min_val, max_val in explicit_filters:
         if min_val is not None or max_val is not None:
             filters[name] = (min_val, max_val)
-    records = await financial_v2_service.query_financial(pool, filters, report_date)
-    logger.info("GET /v2/financial/query returned %d records", len(records))
+    records = await financial_v2_service.query_financial(pool, filters, report_date_start, report_date_end)
+    symbol_count = len(records)
+    period_count = sum(len(v) for v in records.values())
+    logger.info("GET /v2/financial/query returned %d symbols (%d periods)", symbol_count, period_count)
     logger.debug("GET /v2/financial/query returned %s", records)
     return records
 

@@ -78,6 +78,59 @@ def test_chinese_names_unique_within_each_table():
             seen.add(col.chinese_name)
 
 
+def test_last_n_quarter_dates_default_four():
+    from app.financial_v2 import _last_n_quarter_dates
+
+    dates = _last_n_quarter_dates(4)
+    assert len(dates) == 4
+    for d in dates:
+        assert d.month in (3, 6, 9, 12)
+        assert d.day in (31, 30)
+
+
+def test_last_n_quarter_dates_returns_descending():
+    from app.financial_v2 import _last_n_quarter_dates
+
+    dates = _last_n_quarter_dates(4)
+    for i in range(len(dates) - 1):
+        assert dates[i] > dates[i + 1]
+
+
+def test_last_n_quarter_dates_year_boundary():
+    from app.financial_v2 import _last_n_quarter_dates
+    from datetime import date
+
+    n = 6
+    dates = _last_n_quarter_dates(n)
+    assert len(dates) == n
+    years = {d.year for d in dates}
+    assert len(years) >= 2  # crosses at least 2 years
+
+
+def test_last_n_quarter_dates_all_quarter_ends():
+    from app.financial_v2 import _last_n_quarter_dates, _QUARTER_END
+
+    dates = _last_n_quarter_dates(8)
+    for d in dates:
+        assert (d.month, d.day) in _QUARTER_END.values()
+
+
+def test_default_report_date_range_covers_four_quarters():
+    from app.financial_v2 import _default_report_date_range, _last_n_quarter_dates
+
+    rstart, rend = _default_report_date_range()
+    dates = _last_n_quarter_dates(4)
+    assert rstart == dates[-1]
+    assert rend == dates[0]
+
+
+def test_default_report_date_range_start_before_end():
+    from app.financial_v2 import _default_report_date_range
+
+    rstart, rend = _default_report_date_range()
+    assert rstart <= rend
+
+
 def test_chinese_names_no_obvious_typos():
     from app.financial_v2_mapping import TABLE_COLUMNS
 
