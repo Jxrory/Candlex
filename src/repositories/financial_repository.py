@@ -57,9 +57,9 @@ class FinancialRepository:
                         "symbol": row.symbol,
                         "report_date": row.report_date,
                     }
-                for col in row.__table__.columns:
-                    if col.name not in ("symbol", "report_date", "source", "updated_at"):
-                        merged[key][col.name] = getattr(row, col.name)
+                for attr_prop in row.__mapper__.column_attrs:
+                    if attr_prop.key not in ("symbol", "report_date", "source", "updated_at"):
+                        merged[key][attr_prop.key] = getattr(row, attr_prop.key)
 
         return [merged[k] for k in sorted(merged, key=lambda x: x[1])]
 
@@ -92,9 +92,9 @@ class FinancialRepository:
         row_dicts = []
         for row in rows:
             d = {"symbol": row.symbol, "report_date": row.report_date}
-            for col in row.__table__.columns:
-                if col.name not in ("symbol", "report_date", "source", "updated_at"):
-                    d[col.name] = getattr(row, col.name)
+            for attr_prop in row.__mapper__.column_attrs:
+                if attr_prop.key not in ("symbol", "report_date", "source", "updated_at"):
+                    d[attr_prop.key] = getattr(row, attr_prop.key)
             row_dicts.append(d)
         return row_dicts
 

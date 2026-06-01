@@ -156,36 +156,17 @@ class _FakeScalars:
         return self._rows
 
 
-def _make_fake_model(attrs: dict):
-    """Create a mock with __table__.columns as a list of column mocks."""
-    all_cols = dict(attrs)
-    for c in ("symbol", "report_date", "source", "updated_at"):
-        all_cols.setdefault(c, None)
-    col_mocks = []
-    for k in all_cols:
-        col = MagicMock()
-        col.name = k
-        col_mocks.append(col)
-    model = MagicMock(__table__=MagicMock(columns=col_mocks))
-    for k, v in attrs.items():
-        setattr(model, k, v)
-    return model
-
-
 @pytest.mark.asyncio
 async def test_get_symbol_data_rejects_concurrent_queries():
-    """Verifies that get_symbol_data does not use asyncio.gather on the same session.
-
-    The sequential query pattern is inherent in the for-loop — this test
-    confirms the method works correctly with a mock session.
-    """
+    """Verifies that get_symbol_data does not use asyncio.gather on the same session."""
     from src.repositories.financial_repository import financial_repository
+    from src.models.financial import FinancialRatio
 
-    row = _make_fake_model({
-        "symbol": "SH.600000",
-        "report_date": date(2025, 6, 30),
-        "roe": 15.0,
-    })
+    row = FinancialRatio(
+        symbol="SH.600000",
+        report_date=date(2025, 6, 30),
+        roe=15.0,
+    )
 
     session = AsyncMock()
     result_for_table = _FakeResult([row])
@@ -201,12 +182,13 @@ async def test_get_symbol_data_rejects_concurrent_queries():
 async def test_query_financial_rejects_concurrent_queries():
     """Same exclusive-access check for the query_financial code path."""
     from src.services.financial_service import query_financial
+    from src.models.financial import FinancialRatio
     from src.models.financial_mapping import TABLE_COLUMNS
 
-    row = _make_fake_model({
-        "symbol": "SH.600000",
-        "report_date": date(2025, 6, 30),
-    })
+    row = FinancialRatio(
+        symbol="SH.600000",
+        report_date=date(2025, 6, 30),
+    )
 
     session = AsyncMock()
     session.execute.return_value = _FakeResult([row])
@@ -219,6 +201,65 @@ async def test_query_financial_rejects_concurrent_queries():
         report_date_end=date(2025, 12, 31),
     )
     assert "SH.600000" in results
+
+
+# ── Regression: renamed ORM columns ─────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_fetch_symbol_rows_handles_mapped_column_names():
+    """fetch_symbol_rows must use ORM attribute keys, not DB column names.
+
+    Regression: FinancialPerShare has weight_roe mapped to DB column
+    'weighted_roe'.  Iterating __table__.columns and calling
+    getattr(row, col.name) fails because 'weighted_roe' is not the
+    Python attribute name.
+    """
+    from src.repositories.financial_repository import financial_repository
+    from src.models.financial import FinancialPerShare
+
+    row = FinancialPerShare(
+        symbol="SH.600519",
+        report_date=date(2024, 6, 30),
+        weight_roe=15.5,
+        eps=2.5,
+    )
+
+    session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [row]
+    session.execute.return_value = mock_result
+
+    rows = await financial_repository.fetch_symbol_rows(
+        session, "financial_per_share", "SH.600519", [date(2024, 6, 30)]
+    )
+    assert len(rows) == 1
+    assert rows[0]["weight_roe"] == 15.5
+    assert rows[0]["eps"] == 2.5
+
+
+@pytest.mark.asyncio
+async def test_get_symbol_data_handles_mapped_column_names():
+    """Same issue in get_symbol_data: must not use getattr(row, col.name)."""
+    from src.repositories.financial_repository import financial_repository
+    from src.models.financial import FinancialPerShare
+
+    row = FinancialPerShare(
+        symbol="SH.600519",
+        report_date=date(2024, 6, 30),
+        weight_roe=15.5,
+        eps=2.5,
+    )
+
+    session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [row]
+    session.execute.return_value = mock_result
+
+    rows = await financial_repository.get_symbol_data(session, "SH.600519")
+    assert len(rows) == 1
+    assert rows[0]["weight_roe"] == 15.5
+    assert rows[0]["eps"] == 2.5
 
 
 def test_chinese_names_no_obvious_typos():
