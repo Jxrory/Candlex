@@ -17,18 +17,9 @@ def test_financial_tables_has_six_entries():
     assert FINANCIAL_TABLES == sorted(TABLE_NAMES)
 
 
-def test_financial_v2_service_has_expected_methods():
-    from app.financial_v2 import FinancialV2Service
-
-    svc = FinancialV2Service()
-    assert hasattr(svc, "get_financial_data")
-    assert hasattr(svc, "query_financial")
-
-
 def test_module_exports():
     from app.financial_v2 import __all__
 
-    assert "financial_v2_service" in __all__
     assert "get_financial_data" in __all__
     assert "query_financial" in __all__
 

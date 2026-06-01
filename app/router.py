@@ -11,7 +11,7 @@ from app.schemas import (
 from app.service import get_kline
 from app.stock_list import stock_list_service
 from app.indicators_service import get_indicators, parse_specs
-from app.financial_v2 import financial_v2_service
+from app.financial_v2 import get_financial_data, query_financial
 from app.news import news_service
 from app.spot import spot_service
 
@@ -236,7 +236,7 @@ async def financial_v2_query(
     for name, min_val, max_val in explicit_filters:
         if min_val is not None or max_val is not None:
             filters[name] = (min_val, max_val)
-    records = await financial_v2_service.query_financial(pool, filters, report_date_start, report_date_end)
+    records = await query_financial(pool, filters, report_date_start, report_date_end)
     symbol_count = len(records)
     period_count = sum(len(v) for v in records.values())
     logger.info("GET /v2/financial/query returned %d symbols (%d periods)", symbol_count, period_count)
@@ -252,6 +252,6 @@ async def financial_v2(
 ):
     logger.info("GET /v2/financial/%s start=%s end=%s", symbol, start, end)
     pool = await get_pool()
-    records = await financial_v2_service.get_financial_data(pool, symbol, start, end)
+    records = await get_financial_data(pool, symbol, start, end)
     logger.info("GET /v2/financial/%s returned %d records", symbol, len(records))
     return records

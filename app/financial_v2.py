@@ -189,26 +189,4 @@ async def query_financial(
     return result
 
 
-class FinancialV2Service:
-    async def get_financial_data(
-        self,
-        pool: asyncpg.Pool,
-        symbol: str,
-        start: date | None = None,
-        end: date | None = None,
-    ) -> list[dict]:
-        return await get_financial_data(pool, symbol, start, end)
-
-    async def query_financial(
-        self,
-        pool: asyncpg.Pool,
-        filters: dict[str, tuple[float | None, float | None]],
-        report_date_start: date | None = None,
-        report_date_end: date | None = None,
-    ) -> dict[str, list[dict]]:
-        return await query_financial(pool, filters, report_date_start, report_date_end)
-
-
-financial_v2_service = FinancialV2Service()
-
-__all__ = ["financial_v2_service", "get_financial_data", "query_financial"]
+__all__ = ["get_financial_data", "query_financial"]

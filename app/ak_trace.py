@@ -132,14 +132,3 @@ async def _log_writer():
         except Exception as e:
             logger.warning("akshare trace pg insert failed: %s", e)
 
-
-async def start_trace():
-    global _log_queue
-    if _log_queue is not None:
-        return
-    _log_queue = asyncio.Queue(maxsize=_QUEUE_MAXSIZE)
-
-
-def stop_trace():
-    global _log_queue
-    _log_queue = None

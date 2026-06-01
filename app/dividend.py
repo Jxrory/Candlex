@@ -170,18 +170,6 @@ class DividendService:
             )
         return {r["ex_date"]: float(r["close"]) if r["close"] is not None else None for r in rows}
 
-    async def _get_prev_close(
-        self, pool: asyncpg.Pool, symbol: str, ex_date: date
-    ) -> float | None:
-        async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """SELECT close FROM kline_data
-                   WHERE symbol = $1 AND date < $2
-                   ORDER BY date DESC LIMIT 1""",
-                symbol, ex_date,
-            )
-        return float(row["close"]) if row and row["close"] is not None else None
-
     async def ensure_fresh(self, pool: asyncpg.Pool, symbol: str) -> None:
         async with pool.acquire() as conn:
             row = await conn.fetchrow(

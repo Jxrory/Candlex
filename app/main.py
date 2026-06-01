@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import random
 from contextlib import asynccontextmanager
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -12,7 +11,6 @@ from app.stock_list import stock_list_service
 from app.spot import spot_service
 from app.database import get_pool, close_pool
 from app.ak_trace import _log_writer
-from app.kline_sync import kline_sync_service
 from app.router import router
 from app.config import settings
 
@@ -27,25 +25,7 @@ scheduler = AsyncIOScheduler()
 _writer_task: asyncio.Task | None = None
 
 
-async def sync_all_dividends():
-    logger.info("scheduled task: sync dividends for all symbols")
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            "SELECT DISTINCT symbol FROM kline_data ORDER BY symbol"
-        )
-    symbols = [r["symbol"] for r in rows]
-    if settings.dividend_sync_symbols:
-        symbols = [s for s in symbols if s in settings.dividend_sync_symbols]
-    for symbol in symbols:
-        try:
-            count = await dividend_service.sync_symbol(pool, symbol)
-            if count:
-                logger.info("synced %d events for %s", count, symbol)
-        except Exception as e:
-            logger.error("dividend sync failed for %s: %s", symbol, e)
-    logger.info("scheduled task: dividend sync complete")
-
+# sync_all_dividends: scheduled dividend sync for all symbols (removed, not in use)
 
 async def sync_stock_list():
     logger.info("scheduled task: sync stock list")
@@ -67,23 +47,7 @@ async def sync_spot_snapshot():
         logger.error("scheduled task: spot sync failed: %s", e)
 
 
-async def sync_kline():
-    logger.info("scheduled task: sync kline sz for pending stocks")
-    pool = await get_pool()
-    try:
-        count = await kline_sync_service.sync_one(pool, source='sina')
-        logger.info("scheduled task: synced kline sz for %d stocks", count)
-    except Exception as e:
-        logger.error("scheduled task: kline sz sync failed: %s", e)
-
-    next_interval = random.randint(150, 300)
-    scheduler.reschedule_job(
-        "sync_kline_sz",
-        trigger="interval",
-        seconds=next_interval,
-    )
-    logger.info("scheduled task: next kline sz sync in %d seconds", next_interval)
-
+# sync_kline: scheduled kline backfill for pending stocks (removed, not in use)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
