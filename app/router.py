@@ -297,7 +297,7 @@ async def spot_sync():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/v2/financial/query", response_model=list[dict])
+@router.get("/v2/financial/query")
 async def financial_v2_query(
     report_date: date | None = Query(None),
     roe_min: float | None = Query(None, alias="roe_min"),
