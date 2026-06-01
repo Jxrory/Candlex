@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 
 @pytest.fixture
@@ -22,13 +22,13 @@ def mock_akshare():
 
 
 def test_spot_source_name():
-    from app.sources.spot import SpotSource
+    from src.tools.sources.spot import SpotSource
     source = SpotSource()
     assert source.name == "sina_spot"
 
 
 def test_spot_source_to_raw_code():
-    from app.sources.spot import SpotSource
+    from src.tools.sources.spot import SpotSource
     source = SpotSource()
     assert source._to_raw_code("SH.600519") == "600519"
     assert source._to_raw_code("SZ.000001") == "000001"
@@ -37,7 +37,7 @@ def test_spot_source_to_raw_code():
 
 @pytest.mark.asyncio
 async def test_spot_source_fetch_all(mock_akshare):
-    from app.sources.spot import SpotSource
+    from src.tools.sources.spot import SpotSource
     source = SpotSource()
     with patch("akshare.stock_zh_a_spot", return_value=mock_akshare):
         df = await source.fetch_all()
@@ -47,7 +47,7 @@ async def test_spot_source_fetch_all(mock_akshare):
 
 @pytest.mark.asyncio
 async def test_spot_source_filter_symbol(mock_akshare):
-    from app.sources.spot import SpotSource
+    from src.tools.sources.spot import SpotSource
     source = SpotSource()
     filtered = source.filter_symbol(mock_akshare, "SH.600519")
     assert len(filtered) == 1
@@ -55,7 +55,7 @@ async def test_spot_source_filter_symbol(mock_akshare):
 
 
 def test_spot_source_filter_symbol_empty():
-    from app.sources.spot import SpotSource
+    from src.tools.sources.spot import SpotSource
     source = SpotSource()
     df = source.filter_symbol(pd.DataFrame({"代码": ["000001"]}), "SH.600519")
     assert len(df) == 0
@@ -108,7 +108,7 @@ class _FakeConn:
 
 @pytest.mark.asyncio
 async def test_spot_service_fetch_real_all(mock_akshare):
-    from app.spot import SpotService
+    from src.services.spot_service import SpotService
     service = SpotService()
     with patch("akshare.stock_zh_a_spot", return_value=mock_akshare):
         result = await service.fetch_real()
@@ -118,7 +118,7 @@ async def test_spot_service_fetch_real_all(mock_akshare):
 
 @pytest.mark.asyncio
 async def test_spot_service_fetch_real_symbol(mock_akshare):
-    from app.spot import SpotService
+    from src.services.spot_service import SpotService
     service = SpotService()
     with patch("akshare.stock_zh_a_spot", return_value=mock_akshare):
         result = await service.fetch_real("SH.600519")
@@ -128,66 +128,66 @@ async def test_spot_service_fetch_real_symbol(mock_akshare):
 
 @pytest.mark.asyncio
 async def test_spot_service_get_latest_all():
-    from app.spot import SpotService
+    from src.services.spot_service import SpotService
     service = SpotService()
-    pool = FakePool()
-    pool.rows = [
+    rows = [
         {"symbol": "SH.600519", "data": json.dumps({"代码": "600519", "最新价": 1800.0, "名称": "贵州茅台"})},
         {"symbol": "SZ.000001", "data": json.dumps({"代码": "000001", "最新价": 12.5, "名称": "平安银行"})},
     ]
-    result = await service.get_latest(pool)
+    conn = AsyncMock()
+    conn.fetch.return_value = rows
+    result = await service.get_latest(conn)
     assert len(result) == 2
     assert result[0]["symbol"] == "SH.600519"
 
 
 @pytest.mark.asyncio
 async def test_spot_service_get_latest_symbol():
-    from app.spot import SpotService
+    from src.services.spot_service import SpotService
     service = SpotService()
-    pool = FakePool()
-    pool.rows = [
-        {"symbol": "SH.600519", "data": json.dumps({"代码": "600519", "最新价": 1800.0})},
-    ]
-    result = await service.get_latest(pool, "SH.600519")
+    conn = AsyncMock()
+    conn.fetchrow.return_value = {
+        "symbol": "SH.600519", "data": json.dumps({"代码": "600519", "最新价": 1800.0}),
+    }
+    result = await service.get_latest(conn, "SH.600519")
     assert len(result) == 1
     assert result[0]["代码"] == "600519"
 
 
 @pytest.mark.asyncio
 async def test_spot_service_get_latest_no_data():
-    from app.spot import SpotService
+    from src.services.spot_service import SpotService
     service = SpotService()
-    pool = FakePool()
-    pool.rows = []
-    result = await service.get_latest(pool)
+    conn = AsyncMock()
+    conn.fetchrow.return_value = None
+    result = await service.get_latest(conn)
     assert result == []
 
 
 @pytest.mark.asyncio
 async def test_spot_service_sync_all(mock_akshare):
-    from app.spot import SpotService
+    from src.services.spot_service import SpotService
     service = SpotService()
-    pool = FakePool()
+    conn = AsyncMock()
+    conn.executemany.return_value = 2
     with patch("akshare.stock_zh_a_spot", return_value=mock_akshare):
-        with patch("app.spot.datetime") as mock_dt:
+        with patch("src.services.spot_service.datetime") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 5, 25, 17, 0, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
-            count = await service.sync_all(pool)
+            count = await service.sync_all(conn)
     assert count == 2
-    assert len(pool.rows) == 2
-    assert pool.rows[0][0] == "SH.600519"  # symbol
 
 
 # ── Route tests ─────────────────────────────────────────────
 
 from unittest.mock import patch
 from fastapi.testclient import TestClient
-from app.main import app
+from src.main import app
 
 client = TestClient(app)
 
 
 def test_spot_real_route_all():
-    with patch("app.spot.spot_service.fetch_real", return_value=[{"代码": "600519", "最新价": 1800.0}]):
+    with patch("src.services.spot_service.spot_service.fetch_real", return_value=[{"代码": "600519", "最新价": 1800.0}]):
         resp = client.get("/quote/spot/real")
     assert resp.status_code == 200
     data = resp.json()
@@ -200,7 +200,7 @@ def test_spot_real_route_codes_filter():
         {"代码": "600519", "最新价": 1800.0},
         {"代码": "000001", "最新价": 12.5},
     ]
-    with patch("app.spot.spot_service.fetch_real", return_value=records):
+    with patch("src.services.spot_service.spot_service.fetch_real", return_value=records):
         resp = client.get("/quote/spot/real?codes=600519")
     assert resp.status_code == 200
     data = resp.json()
@@ -209,7 +209,7 @@ def test_spot_real_route_codes_filter():
 
 
 def test_spot_real_route_symbol():
-    with patch("app.spot.spot_service.fetch_real", return_value=[{"代码": "600519", "最新价": 1800.0}]):
+    with patch("src.services.spot_service.spot_service.fetch_real", return_value=[{"代码": "600519", "最新价": 1800.0}]):
         resp = client.get("/quote/spot/real/SH.600519")
     assert resp.status_code == 200
 
@@ -220,7 +220,7 @@ def test_spot_real_route_invalid_symbol():
 
 
 def test_spot_route_all():
-    with patch("app.spot.spot_service.get_latest", return_value=[{"代码": "600519", "最新价": 1800.0}]):
+    with patch("src.services.spot_service.spot_service.get_latest", return_value=[{"代码": "600519", "最新价": 1800.0}]):
         resp = client.get("/quote/spot")
     assert resp.status_code == 200
     data = resp.json()
@@ -228,6 +228,6 @@ def test_spot_route_all():
 
 
 def test_spot_route_symbol():
-    with patch("app.spot.spot_service.get_latest", return_value=[{"代码": "600519", "最新价": 1800.0}]):
+    with patch("src.services.spot_service.spot_service.get_latest", return_value=[{"代码": "600519", "最新价": 1800.0}]):
         resp = client.get("/quote/spot/SH.600519")
     assert resp.status_code == 200

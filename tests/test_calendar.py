@@ -1,7 +1,7 @@
 from datetime import date
 import pytest
 
-from app.calendar import CalendarService
+from src.services.calendar_service import CalendarService
 
 
 @pytest.fixture

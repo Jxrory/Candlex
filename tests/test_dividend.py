@@ -1,6 +1,6 @@
 from datetime import date
 import pytest
-from app.dividend import _adjustment_ratio, compute_factor
+from src.services.dividend_service import _adjustment_ratio, compute_factor
 
 
 class TestAdjustmentRatio:

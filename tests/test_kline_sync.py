@@ -2,7 +2,7 @@ import pytest
 from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.kline_sync import KlineSyncService
+from src.services.kline_sync_service import KlineSyncService
 
 Y2000 = date(2000, 1, 1)
 TODAY = date.today()
@@ -13,6 +13,7 @@ YESTERDAY = TODAY - timedelta(days=1)
 def mock_pool():
     pool = MagicMock()
     conn = AsyncMock()
+    pool.acquire.return_value = AsyncMock()
     pool.acquire.return_value.__aenter__.return_value = conn
     return pool, conn
 
@@ -23,7 +24,7 @@ async def test_sync_one_success(mock_pool):
     conn.fetchrow.return_value = {"symbol": "SH.600519"}
     conn.execute.return_value = "UPDATE 1"
 
-    with patch("app.kline_sync.get_kline", new_callable=AsyncMock) as mock_get:
+    with patch("src.services.kline_sync_service.get_kline", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = []
         result = await KlineSyncService().sync_one(pool)
 
@@ -40,7 +41,7 @@ async def test_sync_one_no_pending(mock_pool):
     pool, conn = mock_pool
     conn.fetchrow.return_value = None
 
-    with patch("app.kline_sync.get_kline", new_callable=AsyncMock) as mock_get:
+    with patch("src.services.kline_sync_service.get_kline", new_callable=AsyncMock) as mock_get:
         result = await KlineSyncService().sync_one(pool)
 
     mock_get.assert_not_called()
@@ -53,7 +54,7 @@ async def test_sync_one_failure(mock_pool):
     conn.fetchrow.return_value = {"symbol": "SH.600519"}
     conn.execute.return_value = "UPDATE 1"
 
-    with patch("app.kline_sync.get_kline", new_callable=AsyncMock) as mock_get:
+    with patch("src.services.kline_sync_service.get_kline", new_callable=AsyncMock) as mock_get:
         mock_get.side_effect = Exception("network error")
         result = await KlineSyncService().sync_one(pool)
 
@@ -68,7 +69,7 @@ async def test_sync_one_with_source(mock_pool):
     conn.fetchrow.return_value = {"symbol": "SH.600519"}
     conn.execute.return_value = "UPDATE 1"
 
-    with patch("app.kline_sync.get_kline", new_callable=AsyncMock) as mock_get:
+    with patch("src.services.kline_sync_service.get_kline", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = []
         result = await KlineSyncService().sync_one(pool, source="sina")
 
@@ -77,7 +78,7 @@ async def test_sync_one_with_source(mock_pool):
 
 
 @pytest.mark.asyncio
-async def test_sync_one_only_sz_sh(mock_pool):
+async def test_sync_one_selects_any_pending(mock_pool):
     pool, conn = mock_pool
     conn.fetchrow.return_value = None
 
@@ -85,7 +86,5 @@ async def test_sync_one_only_sz_sh(mock_pool):
 
     conn.fetchrow.assert_called_once()
     sql = conn.fetchrow.call_args[0][0]
-    assert "LIKE 'SH.%'" in sql
-    assert "LIKE 'SZ.%'" in sql
-    assert "LIKE 'BJ.%'" not in sql
+    assert "list_status IS NULL" in sql
     assert "LIMIT 1" in sql

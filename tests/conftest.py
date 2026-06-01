@@ -14,5 +14,5 @@ def sample_kline_records():
 
 @pytest.fixture
 def sample_records(sample_kline_records):
-    from app.service import _rows_to_records
+    from src.services.kline_service import _rows_to_records
     return _rows_to_records(sample_kline_records)

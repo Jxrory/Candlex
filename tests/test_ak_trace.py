@@ -3,7 +3,7 @@ import json
 import logging
 from datetime import date
 import pytest
-from app.ak_trace import trace_akshare, _extract_symbol, _extract_params
+from src.services.ak_trace import trace_akshare, _extract_symbol, _extract_params
 
 
 class TestExtractSymbol:
@@ -56,5 +56,5 @@ class TestTraceDecorator:
         assert result == "ok"
 
     async def test_queue_dropped_when_not_started(self):
-        from app.ak_trace import _schedule_pg_insert
+        from src.services.ak_trace import _schedule_pg_insert
         _schedule_pg_insert("test", None, {}, "success", 1, 100, None)

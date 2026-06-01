@@ -1,5 +1,5 @@
 from datetime import date, timedelta
-from unittest.mock import patch, AsyncMock
+from unittest.mock import MagicMock, patch, AsyncMock
 import pandas as pd
 import pytest
 
@@ -14,7 +14,7 @@ def _default_end() -> date:
 
 @pytest.mark.asyncio
 async def test_sina_source_format():
-    from app.sources.sina import SinaSource
+    from src.tools.sources.sina import SinaSource
     df = await SinaSource().fetch("sz000001", _default_start(), _default_end())
 
     assert not df.empty
@@ -28,7 +28,7 @@ async def test_sina_source_format():
 
 @pytest.mark.asyncio
 async def test_tencent_source_format():
-    from app.sources.tencent import TencentSource
+    from src.tools.sources.tencent import TencentSource
     try:
         df = await TencentSource().fetch("SZ.000001", _default_start(), _default_end())
     except Exception as e:
@@ -44,7 +44,7 @@ async def test_tencent_source_format():
 
 @pytest.mark.asyncio
 async def test_eastmoney_source_format():
-    from app.sources.eastmoney import EastMoneySource
+    from src.tools.sources.eastmoney import EastMoneySource
     try:
         df = await EastMoneySource().fetch("SZ.000001", _default_start(), _default_end())
     except Exception as e:
@@ -62,7 +62,7 @@ async def test_eastmoney_source_format():
 
 @pytest.mark.asyncio
 async def test_mootdx_source_format():
-    from app.sources.mootdx import MootdxSource
+    from src.tools.sources.mootdx import MootdxSource
     try:
         df = await MootdxSource().fetch("SH.600300", _default_start(), _default_end())
     except Exception as e:
@@ -78,7 +78,7 @@ async def test_mootdx_source_format():
 
 
 def test_no_adjust_returns_raw(sample_records):
-    from app.service import _apply_adjust
+    from src.services.kline_service import _apply_adjust
     result = _apply_adjust(sample_records, [], {}, "qfq")
     assert result[0].close == 10.5
 
@@ -86,7 +86,7 @@ def test_no_adjust_returns_raw(sample_records):
 def test_qfq_adjust_applies_factor(sample_records):
     events = [type("E", (), {"ex_date": date(2024, 6, 1)})()]
     adj_map = {date(2024, 6, 1): 0.85}
-    from app.service import _apply_adjust
+    from src.services.kline_service import _apply_adjust
     result = _apply_adjust(sample_records, events, adj_map, "qfq")
     assert result[0].close == pytest.approx(10.5 * 0.85)
     assert result[1].close == pytest.approx(11.0 * 0.85)
@@ -94,19 +94,23 @@ def test_qfq_adjust_applies_factor(sample_records):
 
 @pytest.mark.asyncio
 async def test_get_kline_with_source_uses_priority():
-    from app.service import get_kline
+    from src.services.kline_service import get_kline
+
+    mock_pool = MagicMock()
+    mock_pool.acquire.return_value = AsyncMock()
+    mock_pool.acquire.return_value.__aenter__.return_value = AsyncMock()
 
     with (
-        patch("app.service.get_pool"),
-        patch("app.service.calendar_service.ensure_fresh"),
-        patch("app.service.calendar_service.nearest_forward", return_value=date(2024, 1, 2)),
-        patch("app.service.calendar_service.nearest_backward", return_value=date(2024, 1, 3)),
-        patch("app.service.query_cached", return_value=[]),
-        patch("app.service.SOURCES", {
+        patch("src.services.kline_service.get_pool", return_value=mock_pool),
+        patch("src.services.kline_service.calendar_service.ensure_fresh"),
+        patch("src.services.kline_service.calendar_service.nearest_forward", return_value=date(2024, 1, 2)),
+        patch("src.services.kline_service.calendar_service.nearest_backward", return_value=date(2024, 1, 3)),
+        patch("src.services.kline_service.kline_repository.get_cached", return_value=[]),
+        patch("src.services.kline_service.SOURCES", {
             "sina": AsyncMock(),
             "tencent": AsyncMock(),
         }) as mock_sources,
-        patch("app.service.upsert_kline"),
+        patch("src.services.kline_service.kline_repository.upsert_many"),
     ):
         mock_sources["sina"].fetch = AsyncMock(return_value=pd.DataFrame())
         mock_sources["tencent"].fetch = AsyncMock(return_value=pd.DataFrame(
@@ -124,6 +128,6 @@ async def test_get_kline_with_source_uses_priority():
 def test_hfq_adjust_applies_factor(sample_records):
     events = [type("E", (), {"ex_date": date(2024, 1, 1)})()]
     adj_map = {date(2024, 1, 1): 0.7}
-    from app.service import _apply_adjust
+    from src.services.kline_service import _apply_adjust
     result = _apply_adjust(sample_records, events, adj_map, "hfq")
     assert result[0].close == pytest.approx(10.5 / 0.7)

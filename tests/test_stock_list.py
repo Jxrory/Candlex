@@ -1,9 +1,9 @@
 import pytest
 from datetime import date
 from fastapi.testclient import TestClient
-from app.main import app
-from app.sources.stock_list import _code_to_exchange
-from app.schemas import StockInfoRecord
+from src.main import app
+from src.tools.sources.stock_list import _code_to_exchange
+from src.schemas.schemas import StockInfoRecord
 
 client = TestClient(app)
 
