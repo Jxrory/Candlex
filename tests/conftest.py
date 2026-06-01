@@ -1,5 +1,9 @@
 import pytest
 from datetime import date
+from unittest.mock import AsyncMock, MagicMock
+
+from src.database import get_db
+from src.main import app
 
 
 @pytest.fixture
@@ -14,5 +18,19 @@ def sample_kline_records():
 
 @pytest.fixture
 def sample_records(sample_kline_records):
-    from src.services.kline_service import _rows_to_records
-    return _rows_to_records(sample_kline_records)
+    from src.schemas.schemas import KlineRecord
+    return [KlineRecord(**r) for r in sample_kline_records]
+
+
+@pytest.fixture(autouse=True)
+def mock_db_session():
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = []
+    mock_result.one_or_none.return_value = None
+    mock_result.first.return_value = None
+    session = AsyncMock()
+    session.execute.return_value = mock_result
+    session.get.return_value = None
+    app.dependency_overrides[get_db] = lambda: session
+    yield
+    app.dependency_overrides.pop(get_db, None)

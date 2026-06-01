@@ -1,42 +1,54 @@
-import asyncio
 import logging
+from collections.abc import AsyncGenerator
 
-import asyncpg
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
 from src.config import settings
 
 logger = logging.getLogger(__name__)
 
-pool: asyncpg.Pool | None = None
-_lock = asyncio.Lock()
+engine: AsyncEngine | None = None
+async_session_maker: async_sessionmaker[AsyncSession] | None = None
 
 
-async def get_pool() -> asyncpg.Pool:
-    global pool
-    if pool is None:
-        async with _lock:
-            if pool is None:
-                logger.info("creating connection pool to %s", settings.db_dsn)
-                pool = await asyncpg.create_pool(
-                    dsn=settings.db_dsn,
-                    min_size=settings.db_min_connections,
-                    max_size=settings.db_max_connections,
-                    timeout=10,
-                    command_timeout=30,
-                )
-                logger.info("connection pool created")
-    return pool
+async def get_engine() -> AsyncEngine:
+    global engine, async_session_maker
+    if engine is None:
+        logger.info("creating sqlalchemy async engine for %s", settings.db_dsn)
+        engine = create_async_engine(
+            settings.db_dsn,
+            echo=settings.db_echo,
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_max_overflow,
+            pool_recycle=3600,
+        )
+        async_session_maker = async_sessionmaker(engine, expire_on_commit=False)
+        logger.info("async engine created")
+    return engine
 
 
-async def get_conn():
-    p = await get_pool()
-    async with p.acquire() as conn:
-        async with conn.transaction():
-            yield conn
+async def get_db() -> AsyncGenerator[AsyncSession]:
+    await get_engine()
+    async with async_session_maker() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
 
 
-async def close_pool() -> None:
-    global pool
-    if pool:
-        logger.info("closing connection pool")
-        await pool.close()
-        pool = None
+async def close_engine() -> None:
+    global engine
+    if engine:
+        logger.info("disposing engine")
+        await engine.dispose()
+        engine = None
+        logger.info("engine disposed")

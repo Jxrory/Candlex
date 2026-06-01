@@ -1,8 +1,12 @@
 import logging
 from datetime import date
 
-import asyncpg
+from sqlalchemy import select, func as sa_func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from src.models.dividend import CorporateEvent
+from src.models.kline import KlineData
 from src.schemas.schemas import DividendRecord
 
 logger = logging.getLogger(__name__)
@@ -11,89 +15,93 @@ logger = logging.getLogger(__name__)
 class DividendRepository:
     async def get_events(
         self,
-        conn: asyncpg.Connection,
+        session: AsyncSession,
         symbol: str,
         start: date | None = None,
         end: date | None = None,
     ) -> list[DividendRecord]:
-        query = """SELECT ex_date, cash_dividend, stock_dividend, capitalization,
-                          rights_ratio, rights_price, event_type
-                   FROM corporate_events
-                   WHERE symbol = $1"""
-        params: list = [symbol]
+        stmt = select(CorporateEvent).where(CorporateEvent.symbol == symbol)
         if start:
-            query += " AND ex_date >= $" + str(len(params) + 1)
-            params.append(start)
+            stmt = stmt.where(CorporateEvent.ex_date >= start)
         if end:
-            query += " AND ex_date <= $" + str(len(params) + 1)
-            params.append(end)
-        query += " ORDER BY ex_date"
+            stmt = stmt.where(CorporateEvent.ex_date <= end)
+        stmt = stmt.order_by(CorporateEvent.ex_date)
 
-        rows = await conn.fetch(query, *params)
+        result = await session.execute(stmt)
+        rows = result.scalars().all()
         return [
             DividendRecord(
-                ex_date=r["ex_date"],
-                cash_dividend=float(r["cash_dividend"]) if r["cash_dividend"] is not None else None,
-                stock_dividend=float(r["stock_dividend"]) if r["stock_dividend"] is not None else None,
-                capitalization=float(r["capitalization"]) if r["capitalization"] is not None else None,
-                rights_ratio=float(r["rights_ratio"]) if r["rights_ratio"] is not None else None,
-                rights_price=float(r["rights_price"]) if r["rights_price"] is not None else None,
-                event_type=r["event_type"],
+                ex_date=r.ex_date,
+                cash_dividend=float(r.cash_dividend) if r.cash_dividend is not None else None,
+                stock_dividend=float(r.stock_dividend) if r.stock_dividend is not None else None,
+                capitalization=float(r.capitalization) if r.capitalization is not None else None,
+                rights_ratio=float(r.rights_ratio) if r.rights_ratio is not None else None,
+                rights_price=float(r.rights_price) if r.rights_price is not None else None,
+                event_type=r.event_type,
             )
             for r in rows
         ]
 
     async def get_adj_ratios(
-        self, conn: asyncpg.Connection, symbol: str
+        self, session: AsyncSession, symbol: str
     ) -> dict[date, float]:
-        rows = await conn.fetch(
-            """SELECT ex_date, adj_ratio FROM corporate_events
-               WHERE symbol = $1 AND adj_ratio IS NOT NULL
-               ORDER BY ex_date""",
-            symbol,
-        )
-        return {r["ex_date"]: float(r["adj_ratio"]) for r in rows}
+        stmt = select(
+            CorporateEvent.ex_date, CorporateEvent.adj_ratio
+        ).where(
+            CorporateEvent.symbol == symbol,
+            CorporateEvent.adj_ratio.is_not(None),
+        ).order_by(CorporateEvent.ex_date)
+
+        result = await session.execute(stmt)
+        return {r.ex_date: float(r.adj_ratio) for r in result}
 
     async def get_prev_close_batch(
-        self, conn: asyncpg.Connection, symbol: str, ex_dates: list[date]
+        self, session: AsyncSession, symbol: str, ex_dates: list[date]
     ) -> dict[date, float | None]:
         if not ex_dates:
             return {}
-        rows = await conn.fetch(
-            """SELECT d.ex_date, k.close FROM
-               (SELECT unnest($2::date[]) AS ex_date) d
-               LEFT JOIN LATERAL (
-                   SELECT close FROM kline_data
-                   WHERE symbol = $1 AND date < d.ex_date
-                   ORDER BY date DESC LIMIT 1
-               ) k ON true""",
-            symbol, ex_dates,
-        )
-        return {r["ex_date"]: float(r["close"]) if r["close"] is not None else None for r in rows}
+        from sqlalchemy import literal, Text
+        from sqlalchemy.dialects.postgresql import array
+
+        close_map: dict[date, float | None] = {}
+        for ex_date in ex_dates:
+            subq = select(KlineData.close).where(
+                KlineData.symbol == symbol,
+                KlineData.date < ex_date,
+            ).order_by(KlineData.date.desc()).limit(1)
+            result = await session.execute(subq)
+            row = result.one_or_none()
+            close_map[ex_date] = float(row[0]) if row and row[0] is not None else None
+        return close_map
 
     async def get_max_ex_date(
-        self, conn: asyncpg.Connection, symbol: str
+        self, session: AsyncSession, symbol: str
     ) -> date | None:
-        row = await conn.fetchrow(
-            """SELECT MAX(ex_date) as max_ex FROM corporate_events
-               WHERE symbol = $1""",
-            symbol,
+        stmt = select(sa_func.max(CorporateEvent.ex_date)).where(
+            CorporateEvent.symbol == symbol
         )
-        return row["max_ex"] if row else None
+        result = await session.execute(stmt)
+        return result.scalar()
 
     async def upsert_many(
-        self, conn: asyncpg.Connection, rows: list[tuple]
+        self, session: AsyncSession, rows: list[tuple]
     ) -> int:
         if not rows:
             return 0
-        await conn.executemany(
-            """INSERT INTO corporate_events
-               (symbol, ex_date, cash_dividend, stock_dividend, capitalization,
-                rights_ratio, rights_price, prev_close, adj_ratio, event_type, source)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-               ON CONFLICT (symbol, ex_date, event_type) DO NOTHING""",
-            rows,
+        stmt = pg_insert(CorporateEvent).values([
+            {
+                "symbol": r[0], "ex_date": r[1],
+                "cash_dividend": r[2], "stock_dividend": r[3],
+                "capitalization": r[4], "rights_ratio": r[5],
+                "rights_price": r[6], "prev_close": r[7],
+                "adj_ratio": r[8], "event_type": r[9], "source": r[10],
+            }
+            for r in rows
+        ])
+        stmt = stmt.on_conflict_do_nothing(
+            index_elements=["symbol", "ex_date", "event_type"],
         )
+        await session.execute(stmt)
         return len(rows)
 
 

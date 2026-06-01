@@ -1,14 +1,13 @@
 import logging
 from datetime import date, datetime, timedelta, timezone
 
-import asyncpg
 import pandas as pd
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.repositories.kline_repository import kline_repository
 from src.services.calendar_service import calendar_service
 from src.services.dividend_service import dividend_service, compute_factor
-from src.database import get_pool
 from src.schemas.schemas import KlineRecord
 from src.tools.sources.base import BaseSource
 from src.tools.sources.sina import SinaSource
@@ -53,19 +52,8 @@ def _df_to_rows(df: pd.DataFrame, symbol: str, source: str) -> list[tuple]:
     return rows
 
 
-def _rows_to_records(rows: list[asyncpg.Record]) -> list[KlineRecord]:
-    return [
-        KlineRecord(
-            date=r["date"],
-            open=float(r["open"]) if r["open"] is not None else 0.0,
-            high=float(r["high"]) if r["high"] is not None else 0.0,
-            low=float(r["low"]) if r["low"] is not None else 0.0,
-            close=float(r["close"]) if r["close"] is not None else 0.0,
-            volume=int(r["volume"]) if r["volume"] is not None else None,
-            amount=float(r["amount"]) if r["amount"] is not None else None,
-        )
-        for r in rows
-    ]
+def _rows_to_records(rows: list[KlineRecord]) -> list[KlineRecord]:
+    return rows
 
 
 def _apply_adjust(
@@ -88,16 +76,16 @@ def _apply_adjust(
 
 
 async def get_kline(
+    session: AsyncSession,
     symbol: str,
     start: date,
     end: date,
     adjust: str | None = None,
     source: str | None = None,
 ) -> list[KlineRecord]:
-    pool = await get_pool()
     today = date.today()
 
-    await calendar_service.ensure_fresh()
+    await calendar_service.ensure_fresh(session)
     start = calendar_service.nearest_forward(start)
     end = calendar_service.nearest_backward(end)
 
@@ -107,11 +95,10 @@ async def get_kline(
             effective_priority.remove(source)
         effective_priority.insert(0, source)
 
-    async with pool.acquire() as conn:
-        cached = await kline_repository.get_cached(conn, symbol, start, end)
+    cached = await kline_repository.get_cached(session, symbol, start, end)
 
     if cached:
-        cached_dates = [r["date"] for r in cached]
+        cached_dates = [r.date for r in cached]
         min_cached = min(cached_dates)
         max_cached = max(cached_dates)
 
@@ -127,48 +114,41 @@ async def get_kline(
 
         if needs_fetch:
             for source_name in effective_priority:
-                source = SOURCES.get(source_name)
-                if not source:
+                src = SOURCES.get(source_name)
+                if not src:
                     continue
                 try:
-                    df = await source.fetch(symbol, fetch_from, end)
+                    df = await src.fetch(symbol, fetch_from, end)
                     if not df.empty:
                         rows = _df_to_rows(df, symbol, source_name)
-                        async with pool.acquire() as conn:
-                            await kline_repository.upsert_many(conn, rows)
+                        await kline_repository.upsert_many(session, rows)
                         break
                 except Exception as e:
                     logger.error("%s %s failed: %s", symbol, source_name, e)
                     continue
 
-            async with pool.acquire() as conn:
-                cached = await kline_repository.get_cached(conn, symbol, start, end)
+            cached = await kline_repository.get_cached(session, symbol, start, end)
     else:
         for source_name in effective_priority:
-            source = SOURCES.get(source_name)
-            if not source:
+            src = SOURCES.get(source_name)
+            if not src:
                 continue
             try:
-                df = await source.fetch(symbol, start, end)
+                df = await src.fetch(symbol, start, end)
                 if not df.empty:
                     rows = _df_to_rows(df, symbol, source_name)
-                    async with pool.acquire() as conn:
-                        await kline_repository.upsert_many(conn, rows)
+                    await kline_repository.upsert_many(session, rows)
                     break
             except Exception as e:
                 logger.error("%s %s failed: %s", symbol, source_name, e)
                 continue
 
-        async with pool.acquire() as conn:
-            cached = await kline_repository.get_cached(conn, symbol, start, end)
-
-    records = _rows_to_records(cached)
+        cached = await kline_repository.get_cached(session, symbol, start, end)
 
     if adjust:
-        async with pool.acquire() as conn:
-            events = await dividend_service.get_events(conn, symbol)
-            adj_map = await dividend_service.get_adj_ratios(conn, symbol)
+        events = await dividend_service.get_events(session, symbol)
+        adj_map = await dividend_service.get_adj_ratios(session, symbol)
         if events:
-            records = _apply_adjust(records, events, adj_map, adjust)
+            cached = _apply_adjust(cached, events, adj_map, adjust)
 
-    return records
+    return cached

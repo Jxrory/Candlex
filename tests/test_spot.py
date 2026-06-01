@@ -69,43 +69,6 @@ import json
 import pytest
 
 
-class FakePool:
-    """In-memory mock for asyncpg Pool used in post-market tests."""
-
-    def __init__(self):
-        self.rows = []
-
-    def acquire(self):
-        return _FakeAcquire(self)
-
-
-class _FakeAcquire:
-    def __init__(self, pool):
-        self.pool = pool
-
-    async def __aenter__(self):
-        return _FakeConn(self.pool)
-
-    async def __aexit__(self, *args):
-        pass
-
-
-class _FakeConn:
-    def __init__(self, pool):
-        self.pool = pool
-
-    async def fetch(self, query, *params):
-        return self.pool.rows
-
-    async def fetchrow(self, query, *params):
-        rows = [r for r in self.pool.rows if r.get("symbol") == params[0]] if params else self.pool.rows
-        return rows[0] if rows else None
-
-    async def executemany(self, query, rows):
-        self.pool.rows = rows
-        return len(rows)
-
-
 @pytest.mark.asyncio
 async def test_spot_service_fetch_real_all(mock_akshare):
     from src.services.spot_service import SpotService
@@ -129,14 +92,15 @@ async def test_spot_service_fetch_real_symbol(mock_akshare):
 @pytest.mark.asyncio
 async def test_spot_service_get_latest_all():
     from src.services.spot_service import SpotService
+    from src.repositories.spot_repository import spot_repository
     service = SpotService()
     rows = [
         {"symbol": "SH.600519", "data": json.dumps({"代码": "600519", "最新价": 1800.0, "名称": "贵州茅台"})},
         {"symbol": "SZ.000001", "data": json.dumps({"代码": "000001", "最新价": 12.5, "名称": "平安银行"})},
     ]
-    conn = AsyncMock()
-    conn.fetch.return_value = rows
-    result = await service.get_latest(conn)
+    session = AsyncMock()
+    with patch.object(spot_repository, "get_all_latest", return_value=rows):
+        result = await service.get_latest(session)
     assert len(result) == 2
     assert result[0]["symbol"] == "SH.600519"
 
@@ -144,12 +108,12 @@ async def test_spot_service_get_latest_all():
 @pytest.mark.asyncio
 async def test_spot_service_get_latest_symbol():
     from src.services.spot_service import SpotService
+    from src.repositories.spot_repository import spot_repository
     service = SpotService()
-    conn = AsyncMock()
-    conn.fetchrow.return_value = {
-        "symbol": "SH.600519", "data": json.dumps({"代码": "600519", "最新价": 1800.0}),
-    }
-    result = await service.get_latest(conn, "SH.600519")
+    session = AsyncMock()
+    expected = {"代码": "600519", "最新价": 1800.0}
+    with patch.object(spot_repository, "get_latest_by_symbol", return_value=expected):
+        result = await service.get_latest(session, "SH.600519")
     assert len(result) == 1
     assert result[0]["代码"] == "600519"
 
@@ -157,29 +121,35 @@ async def test_spot_service_get_latest_symbol():
 @pytest.mark.asyncio
 async def test_spot_service_get_latest_no_data():
     from src.services.spot_service import SpotService
+    from src.repositories.spot_repository import spot_repository
     service = SpotService()
-    conn = AsyncMock()
-    conn.fetchrow.return_value = None
-    result = await service.get_latest(conn)
+    session = AsyncMock()
+    with patch.object(spot_repository, "get_all_latest", return_value=[]):
+        result = await service.get_latest(session)
     assert result == []
 
 
 @pytest.mark.asyncio
 async def test_spot_service_sync_all(mock_akshare):
     from src.services.spot_service import SpotService
+    from src.repositories.spot_repository import spot_repository
+    from src.repositories.kline_repository import kline_repository
     service = SpotService()
-    conn = AsyncMock()
-    conn.executemany.return_value = 2
-    with patch("akshare.stock_zh_a_spot", return_value=mock_akshare):
-        with patch("src.services.spot_service.datetime") as mock_dt:
-            mock_dt.now.return_value = datetime(2026, 5, 25, 17, 0, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
-            count = await service.sync_all(conn)
+    session = AsyncMock()
+    with (
+        patch("akshare.stock_zh_a_spot", return_value=mock_akshare),
+        patch("src.services.spot_service.datetime") as mock_dt,
+        patch.object(spot_repository, "upsert_many"),
+        patch.object(kline_repository, "upsert_many"),
+    ):
+        mock_dt.now.return_value = datetime(2026, 5, 25, 17, 0, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+        count = await service.sync_all(session)
     assert count == 2
 
 
 # ── Route tests ─────────────────────────────────────────────
 
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
 from src.main import app
 

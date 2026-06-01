@@ -1,8 +1,10 @@
 import logging
 from datetime import date, timedelta
 
-from fastapi import APIRouter, HTTPException, Query, Path
+from fastapi import APIRouter, Depends, HTTPException, Query, Path
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.database import get_db
 from src.schemas.schemas import KlineRecord
 from src.services.kline_service import get_kline
 from src.services.indicators_service import get_indicators, parse_specs
@@ -18,6 +20,7 @@ async def kline(
     end: date | None = Query(None),
     adjust: str | None = Query(None, pattern="^(qfq|hfq)$"),
     source: str | None = Query(None),
+    session: AsyncSession = Depends(get_db),
 ):
     today = date.today()
     if end is None:
@@ -26,7 +29,7 @@ async def kline(
         start = today - timedelta(days=365)
 
     logger.info("GET /kline/%s start=%s end=%s adjust=%s source=%s", symbol, start, end, adjust, source)
-    records = await get_kline(symbol, start, end, adjust, source=source)
+    records = await get_kline(session, symbol, start, end, adjust, source=source)
     logger.info("GET /kline/%s returned %d records", symbol, len(records))
     return records
 
@@ -38,6 +41,7 @@ async def indicators(
     end: date | None = Query(None),
     adjust: str | None = Query(None, pattern="^(qfq|hfq)$"),
     i: list[str] = Query(default_factory=list),
+    session: AsyncSession = Depends(get_db),
 ):
     today = date.today()
     if end is None:
@@ -50,6 +54,6 @@ async def indicators(
         specs = parse_specs(i)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    result = await get_indicators(symbol, start, end, adjust, specs)
+    result = await get_indicators(session, symbol, start, end, adjust, specs)
     logger.info("GET /indicators/%s returned %d records", symbol, len(result))
     return result

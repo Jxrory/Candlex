@@ -1,8 +1,8 @@
 import logging
 from datetime import date, timedelta
 
-import asyncpg
 import pandas as pd
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.repositories.dividend_repository import dividend_repository
 from src.schemas.schemas import DividendRecord
@@ -54,17 +54,17 @@ class DividendService:
 
     async def get_events(
         self,
-        conn: asyncpg.Connection,
+        session: AsyncSession,
         symbol: str,
         start: date | None = None,
         end: date | None = None,
     ) -> list[DividendRecord]:
-        return await dividend_repository.get_events(conn, symbol, start, end)
+        return await dividend_repository.get_events(session, symbol, start, end)
 
     async def get_adj_ratios(
-        self, conn: asyncpg.Connection, symbol: str
+        self, session: AsyncSession, symbol: str
     ) -> dict[date, float]:
-        return await dividend_repository.get_adj_ratios(conn, symbol)
+        return await dividend_repository.get_adj_ratios(session, symbol)
 
     async def _fetch_from_sources(self, symbol: str) -> tuple[pd.DataFrame, str]:
         for source in self.sources:
@@ -79,14 +79,14 @@ class DividendService:
         return pd.DataFrame(), ""
 
     async def sync_symbol(
-        self, conn: asyncpg.Connection, symbol: str
+        self, session: AsyncSession, symbol: str
     ) -> int:
         df, source_name = await self._fetch_from_sources(symbol)
         if df.empty:
             return 0
 
         ex_dates = [row["ex_date"] for _, row in df.iterrows()]
-        prev_close_map = await dividend_repository.get_prev_close_batch(conn, symbol, ex_dates)
+        prev_close_map = await dividend_repository.get_prev_close_batch(session, symbol, ex_dates)
 
         rows: list[tuple] = []
         for _, row in df.iterrows():
@@ -108,13 +108,13 @@ class DividendService:
                 prev_close, adj, et, source_name,
             ))
 
-        return await dividend_repository.upsert_many(conn, rows)
+        return await dividend_repository.upsert_many(session, rows)
 
-    async def ensure_fresh(self, conn: asyncpg.Connection, symbol: str) -> None:
-        max_ex = await dividend_repository.get_max_ex_date(conn, symbol)
+    async def ensure_fresh(self, session: AsyncSession, symbol: str) -> None:
+        max_ex = await dividend_repository.get_max_ex_date(session, symbol)
         if max_ex and max_ex >= date.today() - timedelta(days=95):
             return
-        await self.sync_symbol(conn, symbol)
+        await self.sync_symbol(session, symbol)
 
 
 dividend_service = DividendService()

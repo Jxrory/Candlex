@@ -96,12 +96,9 @@ def test_qfq_adjust_applies_factor(sample_records):
 async def test_get_kline_with_source_uses_priority():
     from src.services.kline_service import get_kline
 
-    mock_pool = MagicMock()
-    mock_pool.acquire.return_value = AsyncMock()
-    mock_pool.acquire.return_value.__aenter__.return_value = AsyncMock()
+    mock_session = AsyncMock()
 
     with (
-        patch("src.services.kline_service.get_pool", return_value=mock_pool),
         patch("src.services.kline_service.calendar_service.ensure_fresh"),
         patch("src.services.kline_service.calendar_service.nearest_forward", return_value=date(2024, 1, 2)),
         patch("src.services.kline_service.calendar_service.nearest_backward", return_value=date(2024, 1, 3)),
@@ -119,7 +116,7 @@ async def test_get_kline_with_source_uses_priority():
              "close": [10.5, 11.0], "volume": [1000000, 1200000], "amount": [1.05e7, 1.3e7]}
         ))
 
-        await get_kline("SH.600519", date(2024, 1, 1), date(2024, 1, 31), source="tencent")
+        await get_kline(mock_session, "SH.600519", date(2024, 1, 1), date(2024, 1, 31), source="tencent")
 
         calls = mock_sources["tencent"].fetch.call_count
         assert calls > 0, "tencent should have been called as the specified source"

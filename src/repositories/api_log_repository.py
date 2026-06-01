@@ -1,22 +1,26 @@
 import logging
 
-import asyncpg
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.models.api_log import ApiRequestLog
 
 logger = logging.getLogger(__name__)
 
 
 class ApiLogRepository:
     async def insert(
-        self, conn: asyncpg.Connection, entry: dict
+        self, session: AsyncSession, entry: dict
     ) -> None:
-        await conn.execute(
-            """INSERT INTO api_request_log
-               (api_name, symbol, params, status, row_count, duration_ms, error_msg)
-               VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7)""",
-            entry["api_name"], entry["symbol"], entry["params"],
-            entry["status"], entry["row_count"], entry["duration_ms"],
-            entry["error_msg"],
+        record = ApiRequestLog(
+            api_name=entry["api_name"],
+            symbol=entry.get("symbol"),
+            params=entry.get("params"),
+            status=entry["status"],
+            row_count=entry.get("row_count"),
+            duration_ms=entry.get("duration_ms"),
+            error_msg=entry.get("error_msg"),
         )
+        session.add(record)
 
 
 api_log_repository = ApiLogRepository()

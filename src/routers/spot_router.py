@@ -1,9 +1,9 @@
 import logging
 
-import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, Path
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database import get_conn
+from src.database import get_db
 from src.services.spot_service import spot_service
 
 logger = logging.getLogger(__name__)
@@ -34,9 +34,9 @@ async def spot_real_symbol(
 
 
 @router.get("/quote/spot", response_model=list[dict])
-async def spot(conn: asyncpg.Connection = Depends(get_conn)):
+async def spot(session: AsyncSession = Depends(get_db)):
     logger.info("GET /quote/spot")
-    records = await spot_service.get_latest(conn)
+    records = await spot_service.get_latest(session)
     logger.info("GET /quote/spot returned %d records", len(records))
     return records
 
@@ -44,19 +44,19 @@ async def spot(conn: asyncpg.Connection = Depends(get_conn)):
 @router.get("/quote/spot/{symbol}")
 async def spot_symbol(
     symbol: str = Path(pattern=r"^(SH|SZ|BJ)\.[0-9]{6}$"),
-    conn: asyncpg.Connection = Depends(get_conn),
+    session: AsyncSession = Depends(get_db),
 ):
     logger.info("GET /quote/spot/%s", symbol)
-    records = await spot_service.get_latest(conn, symbol)
+    records = await spot_service.get_latest(session, symbol)
     logger.info("GET /quote/spot/%s returned %d records", symbol, len(records))
     return records
 
 
 @router.get("/quote/sync", response_model=dict)
-async def spot_sync(conn: asyncpg.Connection = Depends(get_conn)):
+async def spot_sync(session: AsyncSession = Depends(get_db)):
     logger.info("GET /quote/spot/sync")
     try:
-        count = await spot_service.sync_all(conn)
+        count = await spot_service.sync_all(session)
         logger.info("GET /quote/spot/sync completed: %d records", count)
         return {"synced": count}
     except Exception as e:

@@ -3,10 +3,11 @@ import logging
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-import asyncpg
 import pandas as pd
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.repositories.spot_repository import spot_repository
+from src.repositories.kline_repository import kline_repository
 from src.services.calendar_service import calendar_service
 from src.tools.sources.spot import SpotSource
 
@@ -39,15 +40,15 @@ class SpotService:
         return df.to_dict(orient="records")
 
     async def get_latest(
-        self, conn: asyncpg.Connection, symbol: str | None = None
+        self, session: AsyncSession, symbol: str | None = None
     ) -> list[dict]:
         if symbol:
-            data = await spot_repository.get_latest_by_symbol(conn, symbol)
+            data = await spot_repository.get_latest_by_symbol(session, symbol)
             if not data:
                 return []
             return [data]
 
-        rows = await spot_repository.get_all_latest(conn)
+        rows = await spot_repository.get_all_latest(session)
         result = []
         for r in rows:
             data = r["data"]
@@ -61,8 +62,8 @@ class SpotService:
             result.append(entry)
         return result
 
-    async def sync_all(self, conn: asyncpg.Connection) -> int:
-        await calendar_service.ensure_fresh()
+    async def sync_all(self, session: AsyncSession) -> int:
+        await calendar_service.ensure_fresh(session)
         today = date.today()
         if not calendar_service.is_trading_day(today):
             logger.info("today %s is not a trading day, skipping spot sync", today)
@@ -100,9 +101,9 @@ class SpotService:
                     close_val, volume_val, amount_val, self.source.name,
                 ))
 
-        await spot_repository.upsert_many(conn, spot_rows)
+        await spot_repository.upsert_many(session, spot_rows)
         if kline_rows:
-            await spot_repository.upsert_kline_many(conn, kline_rows)
+            await kline_repository.upsert_many(session, kline_rows)
 
         return len(spot_rows)
 

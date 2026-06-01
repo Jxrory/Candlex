@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 
-import asyncpg
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.repositories.news_repository import news_repository
 from src.schemas.schemas import NewsRecord
@@ -16,14 +16,14 @@ class NewsService:
 
     async def get_news(
         self,
-        conn: asyncpg.Connection,
+        session: AsyncSession,
         symbol: str,
         start: datetime | None = None,
         end: datetime | None = None,
     ) -> list[NewsRecord]:
-        return await news_repository.get_news(conn, symbol, start, end)
+        return await news_repository.get_news(session, symbol, start, end)
 
-    async def sync_symbol(self, conn: asyncpg.Connection, symbol: str) -> int:
+    async def sync_symbol(self, session: AsyncSession, symbol: str) -> int:
         df = await self.source.fetch(symbol)
         if df.empty:
             return 0
@@ -35,7 +35,7 @@ class NewsService:
                 row["publish_time"], row["source_name"], row["url"],
             ))
 
-        return await news_repository.upsert_many(conn, rows)
+        return await news_repository.upsert_many(session, rows)
 
 
 news_service = NewsService()

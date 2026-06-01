@@ -20,10 +20,11 @@ dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=1.3.0",
     "pytest-mock>=3.15.1",
+    "alembic>=1.14",
 ]
 
 [tool.setuptools.packages.find]
-include = ["app*"]
+include = ["src*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

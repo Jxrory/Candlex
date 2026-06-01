@@ -5,6 +5,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.kline_service import get_kline
 from src.tools.indicators import IndicatorSpec, SUPPORTED, compute_many
@@ -70,13 +71,14 @@ def parse_specs(raw: list[str]) -> list[IndicatorSpec]:
 
 
 async def get_indicators(
+    session: AsyncSession,
     symbol: str,
     start: date,
     end: date,
     adjust: str | None = None,
     specs: list[IndicatorSpec] | None = None,
 ) -> list[dict[str, Any]]:
-    records = await get_kline(symbol, start, end, adjust)
+    records = await get_kline(session, symbol, start, end, adjust)
     if not records:
         return []
     df = pd.DataFrame([r.model_dump() for r in records])

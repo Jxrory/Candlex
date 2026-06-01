@@ -1,15 +1,16 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.calendar_service import calendar_service
 from src.services.dividend_service import dividend_service
 from src.services.stock_list_service import stock_list_service
 from src.services.spot_service import spot_service
-from src.database import get_pool, close_pool
+from src.database import get_engine, close_engine, async_session_maker
 from src.services.ak_trace import _log_writer
 from src.routers.calendar_router import router as calendar_router
 from src.routers.kline_router import router as kline_router
@@ -31,15 +32,13 @@ scheduler = AsyncIOScheduler()
 _writer_task: asyncio.Task | None = None
 
 
-# sync_all_dividends: scheduled dividend sync for all symbols (removed, not in use)
-
 async def sync_stock_list():
     logger.info("scheduled task: sync stock list")
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        async with conn.transaction():
+    await get_engine()
+    async with async_session_maker() as session:
+        async with session.begin():
             try:
-                count = await stock_list_service.sync(conn, "ZH_A")
+                count = await stock_list_service.sync(session, "ZH_A")
                 logger.info("scheduled task: synced %d stock records", count)
             except Exception as e:
                 logger.error("scheduled task: stock list sync failed: %s", e)
@@ -47,23 +46,22 @@ async def sync_stock_list():
 
 async def sync_spot_snapshot():
     logger.info("scheduled task: sync spot snapshot")
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        async with conn.transaction():
+    await get_engine()
+    async with async_session_maker() as session:
+        async with session.begin():
             try:
-                count = await spot_service.sync_all(conn)
+                count = await spot_service.sync_all(session)
                 logger.info("scheduled task: synced %d spot records", count)
             except Exception as e:
                 logger.error("scheduled task: spot sync failed: %s", e)
 
 
-# sync_kline: scheduled kline backfill for pending stocks (removed, not in use)
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("CandleX starting up")
-    await calendar_service.load()
-    await get_pool()
+    engine = await get_engine()
+    async with AsyncSession(engine) as session:
+        await calendar_service.load(session)
     global _writer_task
     _writer_task = asyncio.create_task(_log_writer())
 
@@ -90,7 +88,7 @@ async def lifespan(app: FastAPI):
     if _writer_task is not None:
         _writer_task.cancel()
     scheduler.shutdown()
-    await close_pool()
+    await close_engine()
     logger.info("CandleX shut down")
 
 

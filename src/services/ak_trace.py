@@ -4,7 +4,9 @@ import json
 import logging
 import time
 
-from src.database import get_pool
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.database import get_engine, async_session_maker
 from src.repositories.api_log_repository import api_log_repository
 
 logger = logging.getLogger(__name__)
@@ -117,11 +119,12 @@ def _schedule_pg_insert(
 async def _log_writer():
     global _log_queue
     _log_queue = asyncio.Queue(maxsize=_QUEUE_MAXSIZE)
-    pool = await get_pool()
+    await get_engine()
     while True:
         entry = await _log_queue.get()
         try:
-            async with pool.acquire() as conn:
-                await api_log_repository.insert(conn, entry)
+            async with async_session_maker() as session:
+                await api_log_repository.insert(session, entry)
+                await session.commit()
         except Exception as e:
-            logger.warning("akshare trace pg insert failed: %s", e)
+            logger.warning("akshare trace insert failed: %s", e)

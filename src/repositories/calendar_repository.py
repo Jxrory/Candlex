@@ -1,28 +1,27 @@
 import logging
 from datetime import date
 
-import asyncpg
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.models.calendar import TradeCalendar
 
 logger = logging.getLogger(__name__)
 
 
 class CalendarRepository:
-    async def get_all_dates(self, conn: asyncpg.Connection) -> list[date]:
-        rows = await conn.fetch(
-            "SELECT trade_date FROM trade_calendar ORDER BY trade_date"
-        )
-        return [r["trade_date"] for r in rows]
+    async def get_all_dates(self, session: AsyncSession) -> list[date]:
+        stmt = select(TradeCalendar.trade_date).order_by(TradeCalendar.trade_date)
+        result = await session.execute(stmt)
+        return [r[0] for r in result]
 
     async def upsert_many(
-        self, conn: asyncpg.Connection, rows: list[tuple]
+        self, session: AsyncSession, rows: list[tuple]
     ) -> None:
         if not rows:
             return
-        await conn.executemany(
-            "INSERT INTO trade_calendar (trade_date, updated_at) VALUES ($1, NOW()) ON CONFLICT (trade_date) DO UPDATE SET updated_at=NOW()",
-            rows,
-            timeout=120,
-        )
+        for row in rows:
+            await session.merge(TradeCalendar(trade_date=row[0]))
 
 
 calendar_repository = CalendarRepository()

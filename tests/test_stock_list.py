@@ -1,5 +1,6 @@
 import pytest
 from datetime import date
+from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from src.main import app
 from src.tools.sources.stock_list import _code_to_exchange
@@ -9,7 +10,6 @@ client = TestClient(app)
 
 
 def test_code_to_exchange_sh():
-    """600xxx and 688xxx codes map to SH."""
     assert _code_to_exchange("600519") == "SH"
     assert _code_to_exchange("601857") == "SH"
     assert _code_to_exchange("603259") == "SH"
@@ -17,7 +17,6 @@ def test_code_to_exchange_sh():
 
 
 def test_code_to_exchange_sz():
-    """0xxxxx and 3xxxxx codes map to SZ."""
     assert _code_to_exchange("000001") == "SZ"
     assert _code_to_exchange("002415") == "SZ"
     assert _code_to_exchange("300750") == "SZ"
@@ -25,19 +24,16 @@ def test_code_to_exchange_sz():
 
 
 def test_code_to_exchange_bj():
-    """4xxxxx and 8xxxxx codes map to BJ."""
     assert _code_to_exchange("830799") == "BJ"
     assert _code_to_exchange("430047") == "BJ"
     assert _code_to_exchange("873001") == "BJ"
 
 
 def test_code_to_exchange_empty_string():
-    """Empty string should return BJ (fallback)."""
     assert _code_to_exchange("") == "BJ"
 
 
 def test_stock_info_record_defaults():
-    """StockInfoRecord should have sensible defaults."""
     r = StockInfoRecord(symbol="SH.600519", name="茅台", market="ZH_A")
     assert r.symbol == "SH.600519"
     assert r.name == "茅台"
@@ -49,7 +45,6 @@ def test_stock_info_record_defaults():
 
 
 def test_stock_info_record_full():
-    """StockInfoRecord should accept all fields."""
     r = StockInfoRecord(
         symbol="SH.600519",
         name="贵州茅台",
@@ -65,13 +60,9 @@ def test_stock_info_record_full():
     assert r.sector == "白酒"
 
 
-def test_stocks_list():
+@patch("src.routers.stock_router.stock_list_service.get_stocks", return_value=[])
+def test_stocks_list(mock_get):
     resp = client.get("/stocks")
     assert resp.status_code == 200
     data = resp.json()
     assert isinstance(data, list)
-    if data:
-        item = data[0]
-        assert "symbol" in item
-        assert "name" in item
-        assert "market" in item

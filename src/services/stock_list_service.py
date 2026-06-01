@@ -1,7 +1,7 @@
 import logging
 
-import asyncpg
 import pandas as pd
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.repositories.stock_list_repository import stock_list_repository
 from src.schemas.schemas import StockInfoRecord
@@ -15,11 +15,11 @@ class StockListService:
         self.source = StockListSource()
 
     async def get_stocks(
-        self, conn: asyncpg.Connection, market: str | None = None
+        self, session: AsyncSession, market: str | None = None
     ) -> list[StockInfoRecord]:
-        return await stock_list_repository.get_all(conn, market)
+        return await stock_list_repository.get_all(session, market)
 
-    async def sync(self, conn: asyncpg.Connection, market: str) -> int:
+    async def sync(self, session: AsyncSession, market: str) -> int:
         df = await self.source.fetch(market)
         if df.empty:
             return 0
@@ -39,7 +39,7 @@ class StockListService:
                 _nan(row.get("sector")),
             ))
 
-        return await stock_list_repository.upsert_many(conn, rows)
+        return await stock_list_repository.upsert_many(session, rows)
 
 
 stock_list_service = StockListService()

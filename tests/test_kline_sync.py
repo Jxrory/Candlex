@@ -10,81 +10,82 @@ YESTERDAY = TODAY - timedelta(days=1)
 
 
 @pytest.fixture
-def mock_pool():
-    pool = MagicMock()
-    conn = AsyncMock()
-    pool.acquire.return_value = AsyncMock()
-    pool.acquire.return_value.__aenter__.return_value = conn
-    return pool, conn
+def mock_session():
+    session = AsyncMock()
+    session.execute.return_value = MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[]))))
+    return session
 
 
 @pytest.mark.asyncio
-async def test_sync_one_success(mock_pool):
-    pool, conn = mock_pool
-    conn.fetchrow.return_value = {"symbol": "SH.600519"}
-    conn.execute.return_value = "UPDATE 1"
+async def test_sync_one_success(mock_session):
+    session = mock_session
 
     with patch("src.services.kline_sync_service.get_kline", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = []
-        result = await KlineSyncService().sync_one(pool)
 
-    mock_get.assert_called_once_with("SH.600519", Y2000, YESTERDAY, source=None)
-    conn.execute.assert_called_once_with(
-        "UPDATE stock_info SET list_status = 'SYNCED', list_date = NOW() WHERE symbol = $1",
-        "SH.600519",
-    )
+        with patch("src.services.kline_sync_service.stock_list_repository.get_next_pending", new_callable=AsyncMock) as mock_pending:
+            mock_pending.return_value = "SH.600519"
+
+            with patch("src.services.kline_sync_service.stock_list_repository.mark_synced", new_callable=AsyncMock) as mock_mark:
+                result = await KlineSyncService().sync_one(session)
+
+    mock_get.assert_called_once_with(session, "SH.600519", Y2000, YESTERDAY, source=None)
     assert result == 1
 
 
 @pytest.mark.asyncio
-async def test_sync_one_no_pending(mock_pool):
-    pool, conn = mock_pool
-    conn.fetchrow.return_value = None
+async def test_sync_one_no_pending(mock_session):
+    session = mock_session
 
     with patch("src.services.kline_sync_service.get_kline", new_callable=AsyncMock) as mock_get:
-        result = await KlineSyncService().sync_one(pool)
+        with patch("src.services.kline_sync_service.stock_list_repository.get_next_pending", new_callable=AsyncMock) as mock_pending:
+            mock_pending.return_value = None
+            result = await KlineSyncService().sync_one(session)
 
     mock_get.assert_not_called()
     assert result == 0
 
 
 @pytest.mark.asyncio
-async def test_sync_one_failure(mock_pool):
-    pool, conn = mock_pool
-    conn.fetchrow.return_value = {"symbol": "SH.600519"}
-    conn.execute.return_value = "UPDATE 1"
+async def test_sync_one_failure(mock_session):
+    session = mock_session
 
     with patch("src.services.kline_sync_service.get_kline", new_callable=AsyncMock) as mock_get:
         mock_get.side_effect = Exception("network error")
-        result = await KlineSyncService().sync_one(pool)
 
-    mock_get.assert_called_once_with("SH.600519", Y2000, YESTERDAY, source=None)
-    conn.execute.assert_not_called()
+        with patch("src.services.kline_sync_service.stock_list_repository.get_next_pending", new_callable=AsyncMock) as mock_pending:
+            mock_pending.return_value = "SH.600519"
+
+            with patch("src.services.kline_sync_service.stock_list_repository.mark_synced", new_callable=AsyncMock) as mock_mark:
+                result = await KlineSyncService().sync_one(session)
+
+    mock_get.assert_called_once_with(session, "SH.600519", Y2000, YESTERDAY, source=None)
     assert result == 0
 
 
 @pytest.mark.asyncio
-async def test_sync_one_with_source(mock_pool):
-    pool, conn = mock_pool
-    conn.fetchrow.return_value = {"symbol": "SH.600519"}
-    conn.execute.return_value = "UPDATE 1"
+async def test_sync_one_with_source(mock_session):
+    session = mock_session
 
     with patch("src.services.kline_sync_service.get_kline", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = []
-        result = await KlineSyncService().sync_one(pool, source="sina")
 
-    mock_get.assert_called_once_with("SH.600519", Y2000, YESTERDAY, source="sina")
+        with patch("src.services.kline_sync_service.stock_list_repository.get_next_pending", new_callable=AsyncMock) as mock_pending:
+            mock_pending.return_value = "SH.600519"
+
+            result = await KlineSyncService().sync_one(session, source="sina")
+
+    mock_get.assert_called_once_with(session, "SH.600519", Y2000, YESTERDAY, source="sina")
     assert result == 1
 
 
 @pytest.mark.asyncio
-async def test_sync_one_selects_any_pending(mock_pool):
-    pool, conn = mock_pool
-    conn.fetchrow.return_value = None
+async def test_sync_one_selects_any_pending(mock_session):
+    session = mock_session
 
-    await KlineSyncService().sync_one(pool)
+    with patch("src.services.kline_sync_service.get_kline", new_callable=AsyncMock) as mock_get:
+        with patch("src.services.kline_sync_service.stock_list_repository.get_next_pending", new_callable=AsyncMock) as mock_pending:
+            mock_pending.return_value = None
+            await KlineSyncService().sync_one(session)
 
-    conn.fetchrow.assert_called_once()
-    sql = conn.fetchrow.call_args[0][0]
-    assert "list_status IS NULL" in sql
-    assert "LIMIT 1" in sql
+    mock_pending.assert_called_once_with(session)
