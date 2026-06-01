@@ -297,7 +297,7 @@ async def spot_sync():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/v2/financial/query")
+@router.get("/v2/financial/query", response_model=list[dict])
 async def financial_v2_query(
     report_date: date | None = Query(None),
     roe_min: float | None = Query(None, alias="roe_min"),
@@ -338,6 +338,7 @@ async def financial_v2_query(
             filters[name] = (min_val, max_val)
     records = await financial_v2_service.query_financial(pool, filters, report_date)
     logger.info("GET /v2/financial/query returned %d records", len(records))
+    logger.debug("GET /v2/financial/query returned %s", records)
     return records
 
 
