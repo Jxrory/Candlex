@@ -14,3 +14,14 @@ class BaseSource(ABC):
     @abstractmethod
     def name(self) -> str:
         ...
+
+
+class BaseStockListSource(ABC):
+    @abstractmethod
+    async def fetch(self, market: str) -> pd.DataFrame:
+        ...
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        ...

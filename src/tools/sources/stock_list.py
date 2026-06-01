@@ -3,6 +3,7 @@ import akshare as ak
 import pandas as pd
 
 from src.services.ak_trace import trace_akshare
+from src.tools.sources.base import BaseStockListSource
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ def _code_to_exchange(code: str) -> str:
     return "BJ"
 
 
-class StockListSource:
+class StockListSource(BaseStockListSource):
     @property
     def name(self) -> str:
         return "stock_list"
