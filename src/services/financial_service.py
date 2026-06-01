@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from datetime import date
 
@@ -125,9 +124,9 @@ async def query_financial(
                         merged_by_date[rd][k] = v
         return sym, merged_by_date
 
-    symbol_results = await asyncio.gather(
-        *[_fetch_symbol_all_dates(sym, rds) for sym, rds in symbol_dates.items()]
-    )
+    symbol_results = []
+    for sym, rds in symbol_dates.items():
+        symbol_results.append(await _fetch_symbol_all_dates(sym, rds))
 
     result: dict[str, list[dict]] = {}
     for sym, merged_by_date in symbol_results:

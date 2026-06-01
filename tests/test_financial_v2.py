@@ -1,4 +1,8 @@
+import asyncio
+
+import asyncpg
 import pytest
+from datetime import date
 
 TABLE_NAMES = [
     "financial_per_share",
@@ -120,6 +124,94 @@ def test_default_report_date_range_start_before_end():
 
     rstart, rend = _default_report_date_range()
     assert rstart <= rend
+
+
+# ── Concurrent connection guard ──────────────────────────────────
+
+
+class _FakeConn:
+    """Emulates asyncpg's exclusive-access enforcement.
+
+    Raises ``InterfaceError('cannot perform operation: another operation is in progress')``
+    if a second ``fetch`` starts before the first completes.
+    Ignores SQL parameters — returns all rows for the matched table.
+    """
+
+    def __init__(self, table_data: dict[str, list[dict]]):
+        self._table_data = table_data
+        self._query_in_progress = False
+
+    async def fetch(self, query: str, *params) -> list[dict]:
+        if self._query_in_progress:
+            msg = "cannot perform operation: another operation is in progress"
+            raise asyncpg.InterfaceError(msg)
+        self._query_in_progress = True
+        try:
+            await asyncio.sleep(0)
+            for name in TABLE_NAMES:
+                if name in query:
+                    return self._table_data.get(name, [])
+            return []
+        finally:
+            self._query_in_progress = False
+
+    async def fetchrow(self, query: str, *params):
+        rows = await self.fetch(query, *params)
+        return rows[0] if rows else None
+
+    async def executemany(self, query: str, rows):
+        self._table_data = {}
+        return len(rows)
+
+
+@pytest.mark.asyncio
+async def test_get_symbol_data_rejects_concurrent_queries():
+    """Verifies that get_symbol_data does not use asyncio.gather on the same connection.
+
+    asyncpg connections raise ``InterfaceError`` when a second query starts
+    before the first finishes.  The current code must run table queries
+    sequentially.
+    """
+    from src.repositories.financial_repository import financial_repository
+
+    row = {
+        "symbol": "SH.600000",
+        "report_date": date(2025, 6, 30),
+        "source": "test",
+        "updated_at": "2025-01-01",
+    }
+    table_data = {t: [dict(row, **{t: 1.0})] for t in TABLE_NAMES}
+
+    conn = _FakeConn(table_data)
+    results = await financial_repository.get_symbol_data(conn, "SH.600000")
+    assert len(results) == 1
+    assert results[0]["symbol"] == "SH.600000"
+    assert results[0]["report_date"] == date(2025, 6, 30)
+
+
+@pytest.mark.asyncio
+async def test_query_financial_rejects_concurrent_queries():
+    """Same exclusive-access check for the query_financial code path."""
+    from src.services.financial_service import query_financial
+    from src.models.financial_mapping import TABLE_COLUMNS
+
+    row = {
+        "symbol": "SH.600000",
+        "report_date": date(2025, 6, 30),
+    }
+    cols = TABLE_COLUMNS["financial_ratio"]
+    for c in cols:
+        row[c.english_name] = 1.0
+
+    table_data = {"financial_ratio": [dict(row)]}
+    conn = _FakeConn(table_data)
+    filters = {cols[0].english_name: (0.5, 1.5)}
+    results = await query_financial(
+        conn, filters,
+        report_date_start=date(2025, 1, 1),
+        report_date_end=date(2025, 12, 31),
+    )
+    assert "SH.600000" in results
 
 
 def test_chinese_names_no_obvious_typos():

@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from datetime import date
 
@@ -32,9 +31,9 @@ class FinancialRepository:
             rows = await conn.fetch(query, *params)
             return [dict(r) for r in rows]
 
-        results = await asyncio.gather(
-            *[_fetch_table(t) for t in FINANCIAL_TABLES]
-        )
+        results = []
+        for t in FINANCIAL_TABLES:
+            results.append(await _fetch_table(t))
 
         merged: dict[tuple[str, date], dict] = {}
         for table_name, rows in zip(FINANCIAL_TABLES, results):
