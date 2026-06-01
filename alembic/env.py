@@ -1,8 +1,10 @@
+import asyncio
 import sys
 from pathlib import Path
 from logging.config import fileConfig
 
-from sqlalchemy import create_engine, pool
+from sqlalchemy import pool
+from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import context
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -29,13 +31,21 @@ def run_migrations_offline():
         context.run_migrations()
 
 
+def do_run_migrations(connection):
+    context.configure(connection=connection, target_metadata=target_metadata)
+    with context.begin_transaction():
+        context.run_migrations()
+
+
 def run_migrations_online():
-    sync_dsn = settings.db_dsn.replace("+asyncpg", "")
-    connectable = create_engine(sync_dsn, poolclass=pool.NullPool)
-    with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
-        with context.begin_transaction():
-            context.run_migrations()
+    connectable = create_async_engine(settings.db_dsn, poolclass=pool.NullPool)
+
+    async def run_async():
+        async with connectable.connect() as connection:
+            await connection.run_sync(do_run_migrations)
+        await connectable.dispose()
+
+    asyncio.run(run_async())
 
 
 if context.is_offline_mode():
