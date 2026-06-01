@@ -4,6 +4,8 @@ A-stock data service: K-line, financial data, trading calendar, dividends, and n
 
 ## Language
 
+命令行中的交互和输出文档请使用中文
+
 **Financial Query**:
 Cross-stock screening endpoint (`/v2/financial/query`) that returns financial data grouped by symbol.
 _Avoid_: flat list, raw query
