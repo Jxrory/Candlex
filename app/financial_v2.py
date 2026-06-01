@@ -40,7 +40,7 @@ def _default_report_date_range() -> tuple[date, date]:
 
 
 async def get_financial_data(
-    pool: asyncpg.Pool,
+    conn: asyncpg.Connection,
     symbol: str,
     start: date | None = None,
     end: date | None = None,
@@ -61,8 +61,7 @@ async def get_financial_data(
             params.append(end)
         query += " ORDER BY report_date"
 
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(query, *params)
+        rows = await conn.fetch(query, *params)
         return [dict(r) for r in rows]
 
     results = await asyncio.gather(
@@ -86,7 +85,7 @@ async def get_financial_data(
 
 
 async def query_financial(
-    pool: asyncpg.Pool,
+    conn: asyncpg.Connection,
     filters: dict[str, tuple[float | None, float | None]],
     report_date_start: date | None = None,
     report_date_end: date | None = None,
@@ -151,8 +150,7 @@ async def query_financial(
     query += " WHERE " + " AND ".join(where_clauses)
     query += " ORDER BY symbol, report_date"
 
-    async with pool.acquire() as conn:
-        matching = await conn.fetch(query, *params)
+    matching = await conn.fetch(query, *params)
 
     if not matching:
         return {}
@@ -167,8 +165,7 @@ async def query_financial(
         merged_by_date: dict[date, dict] = {}
         for tbl in FINANCIAL_TABLES:
             q = f"SELECT * FROM {tbl} WHERE symbol = $1 AND report_date = ANY($2)"
-            async with pool.acquire() as conn:
-                rows = await conn.fetch(q, sym, list(rds))
+            rows = await conn.fetch(q, sym, list(rds))
             for row in rows:
                 rd = row["report_date"]
                 if rd not in merged_by_date:

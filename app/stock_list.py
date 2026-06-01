@@ -14,7 +14,7 @@ class StockListService:
         self.source = StockListSource()
 
     async def get_stocks(
-        self, pool: asyncpg.Pool, market: str | None = None
+        self, conn: asyncpg.Connection, market: str | None = None
     ) -> list[StockInfoRecord]:
         if market:
             query = "SELECT symbol, name, market, list_date, list_status, industry, sector FROM stock_info WHERE market = $1 ORDER BY symbol"
@@ -23,8 +23,7 @@ class StockListService:
             query = "SELECT symbol, name, market, list_date, list_status, industry, sector FROM stock_info ORDER BY symbol"
             params = []
 
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(query, *params)
+        rows = await conn.fetch(query, *params)
 
         return [
             StockInfoRecord(
@@ -39,7 +38,7 @@ class StockListService:
             for r in rows
         ]
 
-    async def sync(self, pool: asyncpg.Pool, market: str) -> int:
+    async def sync(self, conn: asyncpg.Connection, market: str) -> int:
         df = await self.source.fetch(market)
         if df.empty:
             return 0
@@ -59,19 +58,18 @@ class StockListService:
                 _nan(row.get("sector")),
             ))
 
-        async with pool.acquire() as conn:
-            await conn.executemany(
-                """INSERT INTO stock_info (symbol, name, market, list_date, list_status, industry, sector)
-                   VALUES ($1,$2,$3,$4,$5,$6,$7)
-                   ON CONFLICT (symbol) DO UPDATE SET
-                       name = EXCLUDED.name,
-                       list_date = COALESCE(EXCLUDED.list_date, stock_info.list_date),
-                       list_status = COALESCE(EXCLUDED.list_status, stock_info.list_status),
-                       industry = COALESCE(EXCLUDED.industry, stock_info.industry),
-                       sector = COALESCE(EXCLUDED.sector, stock_info.sector),
-                       updated_at = NOW()""",
-                rows,
-            )
+        await conn.executemany(
+            """INSERT INTO stock_info (symbol, name, market, list_date, list_status, industry, sector)
+               VALUES ($1,$2,$3,$4,$5,$6,$7)
+               ON CONFLICT (symbol) DO UPDATE SET
+                   name = EXCLUDED.name,
+                   list_date = COALESCE(EXCLUDED.list_date, stock_info.list_date),
+                   list_status = COALESCE(EXCLUDED.list_status, stock_info.list_status),
+                   industry = COALESCE(EXCLUDED.industry, stock_info.industry),
+                   sector = COALESCE(EXCLUDED.sector, stock_info.sector),
+                   updated_at = NOW()""",
+            rows,
+        )
         return len(rows)
 
 

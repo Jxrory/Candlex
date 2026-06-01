@@ -27,6 +27,13 @@ async def get_pool() -> asyncpg.Pool:
     return pool
 
 
+async def get_conn():
+    p = await get_pool()
+    async with p.acquire() as conn:
+        async with conn.transaction():
+            yield conn
+
+
 async def close_pool() -> None:
     global pool
     if pool:

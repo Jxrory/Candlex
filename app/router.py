@@ -1,10 +1,11 @@
 import logging
 from datetime import date, datetime, timedelta
-from fastapi import APIRouter, HTTPException, Query, Path
+import asyncpg
+from fastapi import APIRouter, Depends, HTTPException, Query, Path
 
 from app.calendar import calendar_service
 from app.dividend import dividend_service
-from app.database import get_pool
+from app.database import get_conn
 from app.schemas import (
     KlineRecord, DividendRecord, StockInfoRecord, NewsRecord,
 )
@@ -82,18 +83,18 @@ async def dividend(
     start: date | None = Query(None),
     end: date | None = Query(None),
     refresh: bool = Query(False),
+    conn: asyncpg.Connection = Depends(get_conn),
 ):
     logger.info("GET /dividend/%s refresh=%s start=%s end=%s", symbol, refresh, start, end)
-    pool = await get_pool()
     if refresh:
-        await dividend_service.sync_symbol(pool, symbol)
-    records = await dividend_service.get_events(pool, symbol, start, end)
+        await dividend_service.sync_symbol(conn, symbol)
+    records = await dividend_service.get_events(conn, symbol, start, end)
 
     if not records and not refresh:
         logger.info("GET /dividend/%s no cached data, auto-syncing", symbol)
-        count = await dividend_service.sync_symbol(pool, symbol)
+        count = await dividend_service.sync_symbol(conn, symbol)
         logger.info("GET /dividend/%s auto-sync completed: %d records", symbol, count)
-        records = await dividend_service.get_events(pool, symbol, start, end)
+        records = await dividend_service.get_events(conn, symbol, start, end)
 
     logger.info("GET /dividend/%s returned %d records", symbol, len(records))
     return records
@@ -103,14 +104,14 @@ async def dividend(
 async def stocks(
     market: str | None = Query(None),
     refresh: bool = Query(False),
+    conn: asyncpg.Connection = Depends(get_conn),
 ):
     logger.info("GET /stocks market=%s refresh=%s", market, refresh)
-    pool = await get_pool()
     if refresh:
         market_to_sync = market or "ZH_A"
-        count = await stock_list_service.sync(pool, market_to_sync)
+        count = await stock_list_service.sync(conn, market_to_sync)
         logger.info("GET /stocks sync completed: %d records for %s", count, market_to_sync)
-    records = await stock_list_service.get_stocks(pool, market)
+    records = await stock_list_service.get_stocks(conn, market)
     logger.info("GET /stocks returned %d records", len(records))
     return records
 
@@ -122,19 +123,19 @@ async def news(
     start: datetime | None = Query(None),
     end: datetime | None = Query(None),
     refresh: bool = Query(False),
+    conn: asyncpg.Connection = Depends(get_conn),
 ):
     logger.info("GET /news/%s refresh=%s start=%s end=%s", symbol, refresh, start, end)
-    pool = await get_pool()
     if refresh:
-        count = await news_service.sync_symbol(pool, symbol)
+        count = await news_service.sync_symbol(conn, symbol)
         logger.info("GET /news/%s sync completed: %d records", symbol, count)
-    records = await news_service.get_news(pool, symbol, start, end)
+    records = await news_service.get_news(conn, symbol, start, end)
 
     if not records and not refresh:
         logger.info("GET /news/%s no cached data, auto-syncing", symbol)
-        count = await news_service.sync_symbol(pool, symbol)
+        count = await news_service.sync_symbol(conn, symbol)
         logger.info("GET /news/%s auto-sync completed: %d records", symbol, count)
-        records = await news_service.get_news(pool, symbol, start, end)
+        records = await news_service.get_news(conn, symbol, start, end)
 
     logger.info("GET /news/%s returned %d records", symbol, len(records))
     return records
@@ -164,10 +165,9 @@ async def spot_real_symbol(
 
 
 @router.get("/quote/spot", response_model=list[dict])
-async def spot():
+async def spot(conn: asyncpg.Connection = Depends(get_conn)):
     logger.info("GET /quote/spot")
-    pool = await get_pool()
-    records = await spot_service.get_latest(pool)
+    records = await spot_service.get_latest(conn)
     logger.info("GET /quote/spot returned %d records", len(records))
     return records
 
@@ -175,20 +175,19 @@ async def spot():
 @router.get("/quote/spot/{symbol}")
 async def spot_symbol(
     symbol: str = Path(pattern=r"^(SH|SZ|BJ)\.[0-9]{6}$"),
+    conn: asyncpg.Connection = Depends(get_conn),
 ):
     logger.info("GET /quote/spot/%s", symbol)
-    pool = await get_pool()
-    records = await spot_service.get_latest(pool, symbol)
+    records = await spot_service.get_latest(conn, symbol)
     logger.info("GET /quote/spot/%s returned %d records", symbol, len(records))
     return records
 
 
 @router.get("/quote/sync", response_model=dict)
-async def spot_sync():
+async def spot_sync(conn: asyncpg.Connection = Depends(get_conn)):
     logger.info("GET /quote/spot/sync")
-    pool = await get_pool()
     try:
-        count = await spot_service.sync_all(pool)
+        count = await spot_service.sync_all(conn)
         logger.info("GET /quote/spot/sync completed: %d records", count)
         return {"synced": count}
     except Exception as e:
@@ -216,12 +215,12 @@ async def financial_v2_query(
     current_ratio_max: float | None = Query(None, alias="current_ratio_max"),
     roa_min: float | None = Query(None, alias="roa_min"),
     roa_max: float | None = Query(None, alias="roa_max"),
+    conn: asyncpg.Connection = Depends(get_conn),
 ):
     logger.info(
         "GET /v2/financial/query report_date_start=%s report_date_end=%s roe_min=%s debt_ratio_min=%s",
         report_date_start, report_date_end, roe_min, debt_ratio_min,
     )
-    pool = await get_pool()
     filters: dict[str, tuple[float | None, float | None]] = {}
     explicit_filters = [
         ("roe", roe_min, roe_max),
@@ -236,7 +235,7 @@ async def financial_v2_query(
     for name, min_val, max_val in explicit_filters:
         if min_val is not None or max_val is not None:
             filters[name] = (min_val, max_val)
-    records = await query_financial(pool, filters, report_date_start, report_date_end)
+    records = await query_financial(conn, filters, report_date_start, report_date_end)
     symbol_count = len(records)
     period_count = sum(len(v) for v in records.values())
     logger.info("GET /v2/financial/query returned %d symbols (%d periods)", symbol_count, period_count)
@@ -249,9 +248,9 @@ async def financial_v2(
     symbol: str = Path(pattern=r"^(SH|SZ|BJ)\.[0-9]{6}$"),
     start: date | None = Query(None),
     end: date | None = Query(None),
+    conn: asyncpg.Connection = Depends(get_conn),
 ):
     logger.info("GET /v2/financial/%s start=%s end=%s", symbol, start, end)
-    pool = await get_pool()
-    records = await get_financial_data(pool, symbol, start, end)
+    records = await get_financial_data(conn, symbol, start, end)
     logger.info("GET /v2/financial/%s returned %d records", symbol, len(records))
     return records

@@ -30,21 +30,25 @@ _writer_task: asyncio.Task | None = None
 async def sync_stock_list():
     logger.info("scheduled task: sync stock list")
     pool = await get_pool()
-    try:
-        count = await stock_list_service.sync(pool, "ZH_A")
-        logger.info("scheduled task: synced %d stock records", count)
-    except Exception as e:
-        logger.error("scheduled task: stock list sync failed: %s", e)
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            try:
+                count = await stock_list_service.sync(conn, "ZH_A")
+                logger.info("scheduled task: synced %d stock records", count)
+            except Exception as e:
+                logger.error("scheduled task: stock list sync failed: %s", e)
 
 
 async def sync_spot_snapshot():
     logger.info("scheduled task: sync spot snapshot")
     pool = await get_pool()
-    try:
-        count = await spot_service.sync_all(pool)
-        logger.info("scheduled task: synced %d spot records", count)
-    except Exception as e:
-        logger.error("scheduled task: spot sync failed: %s", e)
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            try:
+                count = await spot_service.sync_all(conn)
+                logger.info("scheduled task: synced %d spot records", count)
+            except Exception as e:
+                logger.error("scheduled task: spot sync failed: %s", e)
 
 
 # sync_kline: scheduled kline backfill for pending stocks (removed, not in use)

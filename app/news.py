@@ -15,7 +15,7 @@ class NewsService:
 
     async def get_news(
         self,
-        pool: asyncpg.Pool,
+        conn: asyncpg.Connection,
         symbol: str,
         start: datetime | None = None,
         end: datetime | None = None,
@@ -30,12 +30,11 @@ class NewsService:
             params.append(end)
         query += " ORDER BY publish_time DESC"
 
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(query, *params)
+        rows = await conn.fetch(query, *params)
 
         return [NewsRecord(**dict(r)) for r in rows]
 
-    async def sync_symbol(self, pool: asyncpg.Pool, symbol: str) -> int:
+    async def sync_symbol(self, conn: asyncpg.Connection, symbol: str) -> int:
         df = await self.source.fetch(symbol)
         if df.empty:
             return 0
@@ -47,18 +46,17 @@ class NewsService:
                 row["publish_time"], row["source_name"], row["url"],
             ))
 
-        async with pool.acquire() as conn:
-            await conn.executemany(
-                """INSERT INTO news (symbol, title, content, publish_time, source_name, url)
-                   VALUES ($1, $2, $3, $4, $5, $6)
-                   ON CONFLICT (symbol, url) DO UPDATE SET
-                       title = EXCLUDED.title,
-                       content = EXCLUDED.content,
-                       publish_time = EXCLUDED.publish_time,
-                       source_name = EXCLUDED.source_name,
-                       updated_at = NOW()""",
-                rows,
-            )
+        await conn.executemany(
+            """INSERT INTO news (symbol, title, content, publish_time, source_name, url)
+               VALUES ($1, $2, $3, $4, $5, $6)
+               ON CONFLICT (symbol, url) DO UPDATE SET
+                   title = EXCLUDED.title,
+                   content = EXCLUDED.content,
+                   publish_time = EXCLUDED.publish_time,
+                   source_name = EXCLUDED.source_name,
+                   updated_at = NOW()""",
+            rows,
+        )
         return len(rows)
 
 

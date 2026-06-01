@@ -53,7 +53,7 @@ class DividendService:
 
     async def get_events(
         self,
-        pool: asyncpg.Pool,
+        conn: asyncpg.Connection,
         symbol: str,
         start: date | None = None,
         end: date | None = None,
@@ -71,8 +71,7 @@ class DividendService:
             params.append(end)
         query += " ORDER BY ex_date"
 
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(query, *params)
+        rows = await conn.fetch(query, *params)
 
         return [
             DividendRecord(
@@ -88,15 +87,14 @@ class DividendService:
         ]
 
     async def get_adj_ratios(
-        self, pool: asyncpg.Pool, symbol: str
+        self, conn: asyncpg.Connection, symbol: str
     ) -> dict[date, float]:
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                """SELECT ex_date, adj_ratio FROM corporate_events
-                   WHERE symbol = $1 AND adj_ratio IS NOT NULL
-                   ORDER BY ex_date""",
-                symbol,
-            )
+        rows = await conn.fetch(
+            """SELECT ex_date, adj_ratio FROM corporate_events
+               WHERE symbol = $1 AND adj_ratio IS NOT NULL
+               ORDER BY ex_date""",
+            symbol,
+        )
         return {r["ex_date"]: float(r["adj_ratio"]) for r in rows}
 
     async def _fetch_from_sources(self, symbol: str) -> tuple[pd.DataFrame, str]:
@@ -112,14 +110,14 @@ class DividendService:
         return pd.DataFrame(), ""
 
     async def sync_symbol(
-        self, pool: asyncpg.Pool, symbol: str
+        self, conn: asyncpg.Connection, symbol: str
     ) -> int:
         df, source_name = await self._fetch_from_sources(symbol)
         if df.empty:
             return 0
 
         ex_dates = [row["ex_date"] for _, row in df.iterrows()]
-        prev_close_map = await self._batch_get_prev_close(pool, symbol, ex_dates)
+        prev_close_map = await self._batch_get_prev_close(conn, symbol, ex_dates)
 
         rows: list[tuple] = []
         for _, row in df.iterrows():
@@ -141,48 +139,45 @@ class DividendService:
                 prev_close, adj, et, source_name,
             ))
 
-        async with pool.acquire() as conn:
-            await conn.executemany(
-                """INSERT INTO corporate_events
-                   (symbol, ex_date, cash_dividend, stock_dividend, capitalization,
-                    rights_ratio, rights_price, prev_close, adj_ratio, event_type, source)
-                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-                   ON CONFLICT (symbol, ex_date, event_type) DO NOTHING""",
-                rows,
-            )
+        await conn.executemany(
+            """INSERT INTO corporate_events
+               (symbol, ex_date, cash_dividend, stock_dividend, capitalization,
+                rights_ratio, rights_price, prev_close, adj_ratio, event_type, source)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+               ON CONFLICT (symbol, ex_date, event_type) DO NOTHING""",
+            rows,
+        )
         return len(rows)
 
     async def _batch_get_prev_close(
-        self, pool: asyncpg.Pool, symbol: str, ex_dates: list[date]
+        self, conn: asyncpg.Connection, symbol: str, ex_dates: list[date]
     ) -> dict[date, float | None]:
         if not ex_dates:
             return {}
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                """SELECT d.ex_date, k.close FROM
-                   (SELECT unnest($2::date[]) AS ex_date) d
-                   LEFT JOIN LATERAL (
-                       SELECT close FROM kline_data
-                       WHERE symbol = $1 AND date < d.ex_date
-                       ORDER BY date DESC LIMIT 1
-                   ) k ON true""",
-                symbol, ex_dates,
-            )
+        rows = await conn.fetch(
+            """SELECT d.ex_date, k.close FROM
+               (SELECT unnest($2::date[]) AS ex_date) d
+               LEFT JOIN LATERAL (
+                   SELECT close FROM kline_data
+                   WHERE symbol = $1 AND date < d.ex_date
+                   ORDER BY date DESC LIMIT 1
+               ) k ON true""",
+            symbol, ex_dates,
+        )
         return {r["ex_date"]: float(r["close"]) if r["close"] is not None else None for r in rows}
 
-    async def ensure_fresh(self, pool: asyncpg.Pool, symbol: str) -> None:
-        async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """SELECT MAX(ex_date) as max_ex FROM corporate_events
-                   WHERE symbol = $1""",
-                symbol,
-            )
+    async def ensure_fresh(self, conn: asyncpg.Connection, symbol: str) -> None:
+        row = await conn.fetchrow(
+            """SELECT MAX(ex_date) as max_ex FROM corporate_events
+               WHERE symbol = $1""",
+            symbol,
+        )
         if row and row["max_ex"]:
             last_event = row["max_ex"]
             three_months_ago = date.today() - timedelta(days=95)
             if last_event >= three_months_ago:
                 return
-        await self.sync_symbol(pool, symbol)
+        await self.sync_symbol(conn, symbol)
 
 
 dividend_service = DividendService()

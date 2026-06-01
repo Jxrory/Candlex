@@ -38,14 +38,15 @@ class SpotService:
         return df.to_dict(orient="records")
 
     async def get_latest(
-        self, pool: asyncpg.Pool, symbol: str | None = None
+        self, conn: asyncpg.Connection, symbol: str | None = None
     ) -> list[dict]:
         if symbol:
-            query = """SELECT data FROM spot_snapshots
-                       WHERE symbol = $1
-                       ORDER BY snapshot_time DESC LIMIT 1"""
-            async with pool.acquire() as conn:
-                row = await conn.fetchrow(query, symbol)
+            row = await conn.fetchrow(
+                """SELECT data FROM spot_snapshots
+                   WHERE symbol = $1
+                   ORDER BY snapshot_time DESC LIMIT 1""",
+                symbol,
+            )
             if not row:
                 return []
             data = row["data"]
@@ -55,12 +56,12 @@ class SpotService:
                 return [data]
             return [dict(data)]
 
-        query = """SELECT symbol, data FROM spot_snapshots
-                   WHERE snapshot_time = (
-                       SELECT MAX(snapshot_time) FROM spot_snapshots
-                   ) ORDER BY symbol"""
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(query)
+        rows = await conn.fetch(
+            """SELECT symbol, data FROM spot_snapshots
+               WHERE snapshot_time = (
+                   SELECT MAX(snapshot_time) FROM spot_snapshots
+               ) ORDER BY symbol"""
+        )
         result = []
         for r in rows:
             data = r["data"]
@@ -74,7 +75,7 @@ class SpotService:
             result.append(entry)
         return result
 
-    async def sync_all(self, pool: asyncpg.Pool) -> int:
+    async def sync_all(self, conn: asyncpg.Connection) -> int:
         await calendar_service.ensure_fresh()
         today = date.today()
         if not calendar_service.is_trading_day(today):
@@ -113,31 +114,29 @@ class SpotService:
                     close_val, volume_val, amount_val, self.source.name,
                 ))
 
-        async with pool.acquire() as conn:
-            await conn.executemany(
-                """INSERT INTO spot_snapshots (symbol, snapshot_time, data, source)
-                   VALUES ($1, $2, $3::jsonb, $4)
-                   ON CONFLICT (symbol, snapshot_time) DO UPDATE SET
-                       data = EXCLUDED.data,
-                       source = EXCLUDED.source""",
-                spot_rows,
-            )
+        await conn.executemany(
+            """INSERT INTO spot_snapshots (symbol, snapshot_time, data, source)
+               VALUES ($1, $2, $3::jsonb, $4)
+               ON CONFLICT (symbol, snapshot_time) DO UPDATE SET
+                   data = EXCLUDED.data,
+                   source = EXCLUDED.source""",
+            spot_rows,
+        )
 
         if kline_rows:
-            async with pool.acquire() as conn:
-                await conn.executemany(
-                    """INSERT INTO kline_data (symbol, date, open, high, low, close, volume, amount, source)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                       ON CONFLICT (symbol, date) DO UPDATE SET
-                           open = EXCLUDED.open,
-                           high = EXCLUDED.high,
-                           low = EXCLUDED.low,
-                           close = EXCLUDED.close,
-                           volume = EXCLUDED.volume,
-                           amount = EXCLUDED.amount,
-                           source = EXCLUDED.source""",
-                    kline_rows,
-                )
+            await conn.executemany(
+                """INSERT INTO kline_data (symbol, date, open, high, low, close, volume, amount, source)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                   ON CONFLICT (symbol, date) DO UPDATE SET
+                       open = EXCLUDED.open,
+                       high = EXCLUDED.high,
+                       low = EXCLUDED.low,
+                       close = EXCLUDED.close,
+                       volume = EXCLUDED.volume,
+                       amount = EXCLUDED.amount,
+                       source = EXCLUDED.source""",
+                kline_rows,
+            )
 
         return len(spot_rows)
 
