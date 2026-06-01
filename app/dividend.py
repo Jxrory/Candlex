@@ -1,10 +1,13 @@
 import logging
 from datetime import date, timedelta
 import asyncpg
+import pandas as pd
 
 from app.database import get_pool
 from app.schemas import DividendRecord
+from app.sources.base import BaseSource
 from app.sources.dividend import DividendSource
+from app.sources.mootdx_dividend import MootdxDividendSource
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +49,7 @@ def compute_factor(
 
 class DividendService:
     def __init__(self):
-        self.source = DividendSource()
+        self.sources: list[BaseSource] = [MootdxDividendSource(), DividendSource()]
 
     async def get_events(
         self,
@@ -96,10 +99,22 @@ class DividendService:
             )
         return {r["ex_date"]: float(r["adj_ratio"]) for r in rows}
 
+    async def _fetch_from_sources(self, symbol: str) -> tuple[pd.DataFrame, str]:
+        for source in self.sources:
+            try:
+                df = await source.fetch(symbol)
+                if not df.empty:
+                    logger.info("dividend data for %s from %s (%d events)", symbol, source.name, len(df))
+                    return df, source.name
+            except Exception as e:
+                logger.warning("dividend source %s failed for %s: %s", source.name, symbol, e)
+                continue
+        return pd.DataFrame(), ""
+
     async def sync_symbol(
         self, pool: asyncpg.Pool, symbol: str
     ) -> int:
-        df = await self.source.fetch(symbol)
+        df, source_name = await self._fetch_from_sources(symbol)
         if df.empty:
             return 0
 
@@ -123,7 +138,7 @@ class DividendService:
 
             rows.append((
                 symbol, ex_date, cd, sd, cap, rr, rp,
-                prev_close, adj, et, self.source.name,
+                prev_close, adj, et, source_name,
             ))
 
         async with pool.acquire() as conn:
