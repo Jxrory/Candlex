@@ -341,7 +341,7 @@ async def financial_v2_query(
     symbol_count = len(records)
     period_count = sum(len(v) for v in records.values())
     logger.info("GET /v2/financial/query returned %d symbols (%d periods)", symbol_count, period_count)
-    logger.debug("GET /v2/financial/query returned %s", records)
+    # logger.debug("GET /v2/financial/query returned %s", records)
     return records
 
 
