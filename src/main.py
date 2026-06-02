@@ -10,7 +10,8 @@ from src.services.calendar_service import calendar_service
 from src.services.dividend_service import dividend_service
 from src.services.stock_list_service import stock_list_service
 from src.services.spot_service import spot_service
-from src.database import get_engine, close_engine, async_session_maker
+from src.database import get_engine, close_engine
+import src.database as database
 from src.services.ak_trace import _log_writer
 from src.routers.calendar_router import router as calendar_router
 from src.routers.kline_router import router as kline_router
@@ -35,7 +36,7 @@ _writer_task: asyncio.Task | None = None
 async def sync_stock_list():
     logger.info("scheduled task: sync stock list")
     await get_engine()
-    async with async_session_maker() as session:
+    async with database.async_session_maker() as session:
         async with session.begin():
             try:
                 count = await stock_list_service.sync(session, "ZH_A")
@@ -47,7 +48,7 @@ async def sync_stock_list():
 async def sync_spot_snapshot():
     logger.info("scheduled task: sync spot snapshot")
     await get_engine()
-    async with async_session_maker() as session:
+    async with database.async_session_maker() as session:
         async with session.begin():
             try:
                 count = await spot_service.sync_all(session)

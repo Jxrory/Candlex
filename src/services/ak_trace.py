@@ -6,7 +6,8 @@ import time
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database import get_engine, async_session_maker
+from src.database import get_engine
+import src.database as database
 from src.repositories.api_log_repository import api_log_repository
 
 logger = logging.getLogger(__name__)
@@ -123,7 +124,7 @@ async def _log_writer():
     while True:
         entry = await _log_queue.get()
         try:
-            async with async_session_maker() as session:
+            async with database.async_session_maker() as session:
                 await api_log_repository.insert(session, entry)
                 await session.commit()
         except Exception as e:
