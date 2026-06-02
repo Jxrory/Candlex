@@ -10,6 +10,8 @@ from src.models.spot import SpotSnapshot
 
 logger = logging.getLogger(__name__)
 
+_BATCH_SIZE = 500
+
 
 class SpotRepository:
     async def get_latest_by_symbol(
@@ -52,18 +54,20 @@ class SpotRepository:
     ) -> None:
         if not rows:
             return
-        stmt = pg_insert(SpotSnapshot).values([
-            {
-                "symbol": r[0], "snapshot_time": r[1],
-                "data": r[2], "source": r[3],
-            }
-            for r in rows
-        ])
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["symbol", "snapshot_time"],
-            set_={"data": stmt.excluded.data, "source": stmt.excluded.source},
-        )
-        await session.execute(stmt)
+        for i in range(0, len(rows), _BATCH_SIZE):
+            chunk = rows[i : i + _BATCH_SIZE]
+            stmt = pg_insert(SpotSnapshot).values([
+                {
+                    "symbol": r[0], "snapshot_time": r[1],
+                    "data": r[2], "source": r[3],
+                }
+                for r in chunk
+            ])
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["symbol", "snapshot_time"],
+                set_={"data": stmt.excluded.data, "source": stmt.excluded.source},
+            )
+            await session.execute(stmt)
 
 
 spot_repository = SpotRepository()

@@ -81,8 +81,7 @@ class SpotService:
             if not symbol:
                 continue
 
-            data_json = json.dumps(data, ensure_ascii=False, default=str)
-            spot_rows.append((symbol, snapshot_time, data_json, self.source.name))
+            spot_rows.append((symbol, snapshot_time, data, self.source.name))
 
             try:
                 open_val = _safe_float(row.get("今开"))

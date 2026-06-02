@@ -10,6 +10,8 @@ from src.schemas.schemas import KlineRecord
 
 logger = logging.getLogger(__name__)
 
+_BATCH_SIZE = 500
+
 
 class KlineRepository:
     async def get_cached(
@@ -38,27 +40,29 @@ class KlineRepository:
     ) -> None:
         if not rows:
             return
-        stmt = pg_insert(KlineData).values([
-            {
-                "symbol": r[0], "date": r[1],
-                "open": r[2], "high": r[3], "low": r[4], "close": r[5],
-                "volume": r[6], "amount": r[7], "source": r[8],
-            }
-            for r in rows
-        ])
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["symbol", "date"],
-            set_={
-                "open": stmt.excluded.open,
-                "high": stmt.excluded.high,
-                "low": stmt.excluded.low,
-                "close": stmt.excluded.close,
-                "volume": stmt.excluded.volume,
-                "amount": stmt.excluded.amount,
-                "source": stmt.excluded.source,
-            },
-        )
-        await session.execute(stmt)
+        for i in range(0, len(rows), _BATCH_SIZE):
+            chunk = rows[i : i + _BATCH_SIZE]
+            stmt = pg_insert(KlineData).values([
+                {
+                    "symbol": r[0], "date": r[1],
+                    "open": r[2], "high": r[3], "low": r[4], "close": r[5],
+                    "volume": r[6], "amount": r[7], "source": r[8],
+                }
+                for r in chunk
+            ])
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["symbol", "date"],
+                set_={
+                    "open": stmt.excluded.open,
+                    "high": stmt.excluded.high,
+                    "low": stmt.excluded.low,
+                    "close": stmt.excluded.close,
+                    "volume": stmt.excluded.volume,
+                    "amount": stmt.excluded.amount,
+                    "source": stmt.excluded.source,
+                },
+            )
+            await session.execute(stmt)
 
 
 kline_repository = KlineRepository()
